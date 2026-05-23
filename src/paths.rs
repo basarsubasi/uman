@@ -40,3 +40,16 @@ pub fn ensure_dirs() -> anyhow::Result<()> {
     std::fs::create_dir_all(index_dir())?;
     Ok(())
 }
+
+static BACKEND_NAME_PATTERN: once_cell::sync::Lazy<regex::Regex> =
+    once_cell::sync::Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9_-]+$").unwrap());
+
+pub fn validate_backend_name(name: &str) -> anyhow::Result<()> {
+    if !BACKEND_NAME_PATTERN.is_match(name) {
+        anyhow::bail!(
+            "invalid backend name '{}': must contain only letters, numbers, hyphens, and underscores",
+            name
+        );
+    }
+    Ok(())
+}

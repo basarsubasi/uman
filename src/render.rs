@@ -20,6 +20,8 @@ pub fn find_renderer() -> Result<String, UmanError> {
 }
 
 pub fn read(backend_name: &str, section: &str, topic: &str) -> anyhow::Result<()> {
+    crate::paths::validate_backend_name(backend_name)?;
+
     let renderer = find_renderer()?;
     let backend_path = crate::paths::backend_dir(backend_name);
 
@@ -27,9 +29,11 @@ pub fn read(backend_name: &str, section: &str, topic: &str) -> anyhow::Result<()
         return Err(UmanError::BackendNotInstalled(backend_name.to_string()).into());
     }
 
+    let manpath = format!("{}:", backend_path.display());
+
     let status = Command::new(&renderer)
         .args([section, topic])
-        .env("MANPATH", &backend_path)
+        .env("MANPATH", &manpath)
         .status()?;
 
     if !status.success() {
