@@ -4,16 +4,15 @@ use clap::{Parser, Subcommand};
 #[command(name = "uman", about = "Universal Man Page Reader")]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
+
+    pub backend: Option<String>,
+    pub section: Option<String>,
+    pub topic: Option<String>,
 }
 
 #[derive(Subcommand)]
 pub enum Commands {
-    Read {
-        backend: String,
-        section: String,
-        topic: String,
-    },
     Install {
         backend: String,
     },

@@ -1,0 +1,194 @@
+# `uman` — Universal Man Page Reader
+
+`uman` lets you read man pages from any operating system on any machine, without VMs, containers, or remote access.
+
+```bash
+uman install linux-upstream
+uman linux-upstream 2 execve
+```
+
+Reading Linux man pages on macOS, BSD pages on Linux — locally, offline, instantly.
+
+## Installation
+
+### From source
+
+Requirements:
+
+- [Rust](https://rustup.rs/) (1.70+)
+- `git` (for git-backed backends)
+- `man` (man-db) or `mandoc` (for rendering)
+
+```bash
+git clone https://github.com/your-org/uman.git
+cd uman
+cargo install --path .
+```
+
+### Dependencies
+
+`uman` delegates rendering to your system's man page renderer. Make sure one of these is installed:
+
+| Tool | Platform | Install |
+|------|----------|---------|
+| `man-db` | Linux | `apt install man-db` / `pacman -S man-db` |
+| `mandoc` | macOS, BSD | pre-installed / `brew install mandoc` |
+
+`git` is required for cloning backends. `curl` is needed for HTTP-backed backends.
+
+## Configuration
+
+`uman` stores its data in two locations:
+
+| Path | Purpose |
+|------|---------|
+| `~/.config/uman/config.json` | Backend registry and settings |
+| `~/.uman/` | Backend data and SQLite index |
+
+The config file is created automatically on first run with default backends. You can edit it to add custom backends:
+
+```json
+{
+  "backends": {
+    "linux-upstream": {
+      "name": "linux-upstream",
+      "source": "https://github.com/mkerrisk/man-pages",
+      "format": "roff",
+      "fetching": "git"
+    },
+    "freebsd": {
+      "name": "freebsd",
+      "source": "https://gitlab.freebsd.org/freebsd/doc-manual.git",
+      "format": "roff",
+      "fetching": "git"
+    }
+  }
+}
+```
+
+### Backend fields
+
+| Field | Description |
+|-------|-------------|
+| `name` | Identifier used in commands |
+| `source` | URL to clone (`git`) or download (`curl`) |
+| `format` | Man page format (`roff`) |
+| `fetching` | Download method: `git` or `curl` |
+
+### Storage layout
+
+```
+~/.config/uman/
+  config.json
+
+~/.uman/
+  backends/
+    linux-upstream/    # raw git clone
+    freebsd/         
+  index/
+    uman.db            # SQLite db
+```
+
+## Usage
+
+### Reading man pages
+
+```bash
+uman <backend> <section> <topic>
+```
+
+```bash
+uman linux-upstream 2 execve
+uman linux-upstream 3 printf
+```
+
+### Installing backends
+
+```bash
+uman install <backend>
+```
+
+```bash
+uman install linux-upstream
+uman install freebsd
+```
+
+### Listing backends
+
+```bash
+uman backend list
+```
+
+Output:
+
+```
+NAME                 STATUS     SOURCE
+freebsd              available  https://gitlab.freebsd.org/freebsd/doc-manual.git
+linux-upstream       installed  https://github.com/mkerrisk/man-pages
+```
+
+### Removing backends
+
+```bash
+uman remove <backend>
+```
+
+```bash
+uman remove linux-upstream
+```
+
+Removes the backend data and its index entries.
+
+### Updating backends
+
+```bash
+uman update            # update all installed backends
+uman update linux-upstream  # update a single backend
+```
+
+For git backends, this runs `git pull` and re-indexes changed pages. For curl backends, it re-downloads the archive.
+
+### Searching
+
+```bash
+uman search <topic>
+```
+
+```bash
+uman search execve
+```
+
+Output:
+
+```
+BACKEND              SECTION    NAME
+linux-upstream       2          execve
+linux-upstream       2          execveat
+linux-upstream       3          fexecve
+```
+
+## Architecture
+
+`uman` does not render man pages itself. It manages local copies of man page collections (backends) and delegates all rendering to your system's `man` or `mandoc` binary, setting `MANPATH` to the appropriate backend directory.
+
+Each backend is stored as a raw git clone. On read, `uman` resolves the backend directory and invokes the renderer with `MANPATH=<backend_dir>:` (trailing colon preserves system man paths for cross-references).
+
+A SQLite index with FTS5 is maintained for fast search. Indexing happens automatically after install and update. Content hashing (SHA-256) drives incremental re-indexing — only changed pages are updated.
+
+```
+install backend → git clone → index into SQLite
+read page       → locate dir → exec man with MANPATH
+update backend  → git pull   → re-index changes
+search          → query SQLite FTS5
+```
+
+## Command reference
+
+| Command | Description |
+|---------|-------------|
+| `uman <backend> <section> <topic>` | Read a man page |
+| `uman install <backend>` | Install a backend |
+| `uman remove <backend>` | Remove a backend |
+| `uman update [<backend>]` | Update one or all backends |
+| `uman search <topic>` | Search for man pages |
+| `uman backend list` | List configured backends |
