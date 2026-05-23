@@ -26,6 +26,8 @@ pub struct Cli {
 pub enum Commands {
     #[command(about = "List configured backends and their status")]
     List,
+    #[command(about = "Print the config file path")]
+    Config,
     #[command(about = "Set or show the default backend", long_about = "Without an argument, shows the current default backend.\n\
                  With an argument, sets the default backend to the given name or alias.\n\
                  The backend must exist in config and be installed.")]

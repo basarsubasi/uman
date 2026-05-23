@@ -1,6 +1,7 @@
 use uman::backend;
 use uman::cli;
 use uman::config::Config;
+use uman::paths;
 use uman::render;
 use uman::search;
 
@@ -17,6 +18,9 @@ fn main() -> anyhow::Result<()> {
         match command {
             cli::Commands::List => {
                 backend::list()?;
+            }
+            cli::Commands::Config => {
+                println!("{}", paths::config_path().display());
             }
             cli::Commands::Default { name } => match name {
                 Some(n) => backend::set_default(&n)?,
@@ -107,6 +111,7 @@ fn print_usage() {
     eprintln!("       uman remove <backend>");
     eprintln!("       uman update [<backend>]");
     eprintln!("       uman search [-k] <topic>");
-    eprintln!("       uman backend list");
-    eprintln!("       uman backend default [<name>]");
+    eprintln!("       uman list");
+    eprintln!("       uman config");
+    eprintln!("       uman default [<name>]");
 }

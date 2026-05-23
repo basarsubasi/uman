@@ -38,6 +38,12 @@ cargo install --path .
 
 The config file is created automatically on first run with default backends. You can edit it to add custom backends:
 
+To print the config path:
+
+```bash
+uman config
+```
+
 ```json
 {
   "backends": {
@@ -136,6 +142,12 @@ The first installed backend is automatically set as the default.
 
 ```bash
 uman list
+```
+
+### Config path
+
+```bash
+uman config
 ```
 
 Output:

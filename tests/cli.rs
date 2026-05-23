@@ -47,6 +47,15 @@ fn parse_list() {
 }
 
 #[test]
+fn parse_config() {
+    let cli = uman::cli::Cli::try_parse_from(["uman", "config"]).unwrap();
+    match cli.command {
+        Some(Commands::Config) => {}
+        other => panic!("expected Config, got {:?}", other),
+    }
+}
+
+#[test]
 fn parse_update_single() {
     let cli = uman::cli::Cli::try_parse_from(["uman", "update", "linux-upstream"]).unwrap();
     match cli.command {
