@@ -113,7 +113,7 @@ fn dispatch_read(
     Ok(())
 }
 
-fn get_or_prompt_default_backend(config: &config::Config) -> anyhow::Result<config::BackendDef> {
+fn get_or_prompt_default_backend(config: &uniman::config::Config) -> anyhow::Result<uniman::config::BackendDef> {
     match config.get_default_backend() {
         Ok(def) => Ok(def.clone()),
         Err(uniman::error::UnimanError::DefaultNotInstalled(name)) => {
@@ -124,7 +124,7 @@ fn get_or_prompt_default_backend(config: &config::Config) -> anyhow::Result<conf
             std::io::stdin().read_line(&mut input)?;
             let input = input.trim().to_lowercase();
             if input.is_empty() || input == "y" || input == "yes" {
-                backend::install(Some(&name))?;
+                uniman::backend::install(Some(&name))?;
                 config.get_default_backend().map(|d| d.clone()).map_err(|e| e.into())
             } else {
                 anyhow::bail!("Aborted. Default backend must be installed to read man pages.");
