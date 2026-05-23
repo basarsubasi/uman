@@ -164,7 +164,9 @@ impl Config {
             .default_backend
             .as_ref()
             .ok_or(UmanError::NoDefaultBackend)?;
-        let def = self.resolve(name)?;
+        let def = self.resolve(name).map_err(|_| {
+            UmanError::DefaultNotFoundInConfig(name.clone())
+        })?;
         if !crate::paths::backend_dir(&def.name).exists() {
             return Err(UmanError::DefaultNotInstalled(def.name.clone()));
         }
@@ -300,6 +302,33 @@ mod tests {
         match result.unwrap_err() {
             UmanError::DefaultNotInstalled(name) => assert_eq!(name, "freebsd"),
             other => panic!("expected DefaultNotInstalled, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn get_default_backend_not_in_config() {
+        let mut config = Config::defaults();
+        config.default_backend = Some("totally-bogus".to_string());
+        let result = config.get_default_backend();
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            UmanError::DefaultNotFoundInConfig(name) => assert_eq!(name, "totally-bogus"),
+            other => panic!("expected DefaultNotFoundInConfig, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn get_default_backend_alias_not_in_config() {
+        // If we set default to an alias that resolves to something in config,
+        // but the resolved name is not installed, we get DefaultNotInstalled.
+        // If default is set to something that can't resolve at all, we get DefaultNotFoundInConfig.
+        let mut config = Config::defaults();
+        config.default_backend = Some("nonexistent-alias".to_string());
+        let result = config.get_default_backend();
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            UmanError::DefaultNotFoundInConfig(name) => assert_eq!(name, "nonexistent-alias"),
+            other => panic!("expected DefaultNotFoundInConfig, got {:?}", other),
         }
     }
 

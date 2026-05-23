@@ -264,30 +264,48 @@ pub fn list() -> anyhow::Result<()> {
     let default_name = config.default_backend.as_deref();
     let mut sorted: Vec<_> = config.backends.iter().collect();
     sorted.sort_by(|a, b| {
-        let a_is_default = default_name == Some(a.0.as_str()) || default_name.map(|d| a.1.aliases.contains(&d.to_string())).unwrap_or(false);
-        let b_is_default = default_name == Some(b.0.as_str()) || default_name.map(|d| b.1.aliases.contains(&d.to_string())).unwrap_or(false);
+        let a_is_default = is_default_backend(default_name, a.0, &a.1.aliases);
+        let b_is_default = is_default_backend(default_name, b.0, &b.1.aliases);
         b_is_default.cmp(&a_is_default).then(a.0.cmp(b.0))
     });
 
-    let mut has_default = false;
-    println!("{:<20} {:<10} {:<10} {} {}", "NAME", "DEFAULT", "STATUS", "FORMAT", "SOURCE");
+    let mut found_default = false;
+    let mut default_canonical: Option<&str> = None;
+    println!("{:<20} {:<12} {:<10} {} {}", "NAME", "DEFAULT", "STATUS", "FORMAT", "SOURCE");
     for (name, def) in &sorted {
-        let is_default = default_name == Some(name.as_str());
+        let is_default = is_default_backend(default_name, name, &def.aliases);
         let default_marker = if is_default { "*" } else { "" };
-        if is_default { has_default = true; }
+        if is_default {
+            found_default = true;
+            default_canonical = Some(name.as_str());
+        }
         let installed = paths::backend_dir(name).exists();
         let status = if installed { "installed" } else { "available" };
         println!(
-            "{:<20} {:<10} {:<10} {} {}",
+            "{:<20} {:<12} {:<10} {} {}",
             name, default_marker, status, def.format, def.source
         );
     }
 
-    if !has_default && default_name.is_some() {
-        println!("\nwarning: default backend '{}' is not installed", default_name.unwrap());
+    if let Some(default_name) = default_name {
+        if !found_default {
+            println!("\nwarning: default backend '{}' is not in config", default_name);
+        } else if let Some(canonical) = default_canonical {
+            let canonical_dir = paths::backend_dir(canonical);
+            if !canonical_dir.exists() {
+                println!("\nwarning: default backend '{}' is not installed", canonical);
+            }
+        }
     }
 
     Ok(())
+}
+
+fn is_default_backend(default_name: Option<&str>, backend_key: &str, aliases: &[String]) -> bool {
+    match default_name {
+        Some(dn) => dn == backend_key || aliases.iter().any(|a| a == dn),
+        None => false,
+    }
 }
 
 pub fn set_default(name: &str) -> anyhow::Result<()> {
@@ -328,4 +346,28 @@ pub fn show_default() -> anyhow::Result<()> {
         None => println!("No default backend set."),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_default_backend_matches_canonical_name() {
+        assert!(is_default_backend(Some("linux-upstream"), "linux-upstream", &[]));
+        assert!(!is_default_backend(Some("linux-upstream"), "freebsd", &[]));
+        assert!(!is_default_backend(None, "linux-upstream", &[]));
+    }
+
+    #[test]
+    fn is_default_backend_matches_alias() {
+        assert!(is_default_backend(Some("linux"), "linux-upstream", &["linux".to_string()]));
+        assert!(is_default_backend(Some("bsd"), "freebsd", &["bsd".to_string()]));
+        assert!(!is_default_backend(Some("linux"), "freebsd", &[]));
+    }
+
+    #[test]
+    fn is_default_backend_none_means_no_default() {
+        assert!(!is_default_backend(None, "linux-upstream", &["linux".to_string()]));
+    }
 }

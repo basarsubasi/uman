@@ -338,6 +338,10 @@ fn error_messages_are_human_readable() {
         uman::error::UmanError::DefaultNotInstalled("linux-upstream".to_string()).to_string(),
         "default backend 'linux-upstream' is not installed; install it or change the default"
     );
+    assert_eq!(
+        uman::error::UmanError::DefaultNotFoundInConfig("bogus".to_string()).to_string(),
+        "default backend 'bogus' not found in config; check the name or add it to your config"
+    );
 }
 
 // ---------- Collect man pages with realistic file tree ----------
@@ -461,8 +465,8 @@ fn config_default_backend_not_installed_errors() {
     assert!(result.is_err());
     match result.unwrap_err() {
         uman::error::UmanError::DefaultNotInstalled(name) => assert_eq!(name, test_name),
-        uman::error::UmanError::BackendNotFound(name) => assert_eq!(name, test_name),
-        other => panic!("expected DefaultNotInstalled or BackendNotFound, got {:?}", other),
+        uman::error::UmanError::DefaultNotFoundInConfig(name) => assert_eq!(name, test_name),
+        other => panic!("expected DefaultNotInstalled or DefaultNotFoundInConfig, got {:?}", other),
     }
 }
 
@@ -475,7 +479,7 @@ fn config_default_backend_via_alias_not_installed_errors() {
     // If it IS installed (unlikely), skip this test gracefully
     match result {
         Err(uman::error::UmanError::DefaultNotInstalled(_)) => {},
-        Err(uman::error::UmanError::BackendNotFound(_)) => {},
+        Err(uman::error::UmanError::DefaultNotFoundInConfig(_)) => {},
         Ok(_) => {}, // freebsd is actually installed — fine, skip
         other => panic!("unexpected result: {:?}", other),
     }

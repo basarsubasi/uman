@@ -15,6 +15,9 @@ pub enum UmanError {
     #[error("default backend '{0}' is not installed; install it or change the default")]
     DefaultNotInstalled(String),
 
+    #[error("default backend '{0}' not found in config; check the name or add it to your config")]
+    DefaultNotFoundInConfig(String),
+
     #[error("no man page renderer found (install man-db or mandoc)")]
     NoRenderer,
 
