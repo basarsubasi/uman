@@ -382,6 +382,8 @@ pub fn list_topics(name: &str) -> anyhow::Result<()> {
         return Err(UnimanError::BackendNotInstalled(canonical.to_string()).into());
     }
 
+    crate::fzf::require_fzf()?;
+
     let topics = crate::db::list_topics_for_backend(canonical)?;
 
     if topics.is_empty() {
@@ -389,11 +391,28 @@ pub fn list_topics(name: &str) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!("{:<6} {:<40} {}", "SEC", "NAME", "DESCRIPTION");
-    for (section, topic_name, description) in &topics {
-        println!("{:<6} {:<40} {}", section, topic_name, description);
-    }
-    println!("\n{} topic(s) in backend '{canonical}'.", topics.len());
+    let lines: Vec<String> = topics
+        .iter()
+        .map(|(section, topic_name, description)| {
+            let display_name = format!("{}({})", topic_name, section);
+            // 1=section, 2=name, 3=display_name, 4=description
+            format!("{}\t{}\t{:<40}\t{}", section, topic_name, display_name, description)
+        })
+        .collect();
+
+    let header = format!("{:<40}\t{}", "NAME", "DESCRIPTION");
+
+    // Use the running binary's path so the execute command works regardless
+    // of how uniman is installed (PATH, full path, cargo run, etc.).
+    let exe = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "uniman".to_string());
+
+    // {1} = section, {2} = name
+    let execute_template = format!("{} {} {{1}} {{2}}", exe, canonical);
+
+    crate::fzf::browse(&header, &execute_template, Some("3,4"), &lines)?;
 
     Ok(())
 }

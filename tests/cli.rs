@@ -89,7 +89,7 @@ fn parse_search() {
     match cli.command {
         Some(Commands::Search { keyword, topic }) => {
             assert!(!keyword);
-            assert_eq!(topic, "execve");
+            assert_eq!(topic.as_deref(), Some("execve"));
         }
         other => panic!("expected Search, got {:?}", other),
     }
@@ -101,7 +101,7 @@ fn parse_search_with_keyword_flag() {
     match cli.command {
         Some(Commands::Search { keyword, topic }) => {
             assert!(keyword);
-            assert_eq!(topic, "execute");
+            assert_eq!(topic.as_deref(), Some("execute"));
         }
         other => panic!("expected Search, got {:?}", other),
     }

@@ -42,10 +42,14 @@ fn main() -> anyhow::Result<()> {
                 backend::update(backend.as_deref())?;
             }
             cli::Commands::Search { keyword, topic } => {
-                if keyword {
-                    search::run_keyword(&topic)?;
+                if let Some(t) = topic {
+                    if keyword {
+                        search::run_keyword(&t)?;
+                    } else {
+                        search::run_filename(&t)?;
+                    }
                 } else {
-                    search::run_filename(&topic)?;
+                    search::run_all()?;
                 }
             }
         }

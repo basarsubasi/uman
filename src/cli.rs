@@ -64,11 +64,12 @@ pub enum Commands {
         backend: Option<String>,
     },
     #[command(about = "Search for man pages", long_about = "Search installed backends for man pages.\n\n\
-                 By default searches page names. Use -k to search page names and descriptions.")]
+                 By default searches page names. Use -k to search page names and descriptions.\n\
+                 If no search term is provided, lists all man pages interactively.")]
     Search {
         #[arg(short, long, help = "Search by keyword (name + description) instead of filename")]
         keyword: bool,
-        #[arg(help = "Search term", value_hint = ValueHint::Other)]
-        topic: String,
+        #[arg(help = "Search term (if omitted, lists all pages)", value_hint = ValueHint::Other)]
+        topic: Option<String>,
     },
 }

@@ -361,6 +361,23 @@ pub fn search_by_keyword(keyword: &str) -> anyhow::Result<Vec<(String, i32, Stri
     })
 }
 
+pub fn list_all_topics() -> anyhow::Result<Vec<(String, i32, String, String)>> {
+    with_conn(|conn| {
+        let mut stmt = conn.prepare(
+            "SELECT backend, section, name, description FROM pages ORDER BY backend ASC, section ASC, name ASC",
+        )?;
+
+        let results: Vec<(String, i32, String, String)> = stmt
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(results)
+    })
+}
+
 pub fn list_topics_for_backend(backend: &str) -> anyhow::Result<Vec<(i32, String, String)>> {
     with_conn(|conn| {
         let mut stmt = conn.prepare(

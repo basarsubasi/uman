@@ -32,4 +32,7 @@ pub enum UnimanError {
 
     #[error("no backends installed")]
     NoBackendsInstalled,
+
+    #[error("fzf is not installed or not on PATH (install it from https://github.com/junegunn/fzf)")]
+    FzfNotFound,
 }
