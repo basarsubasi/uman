@@ -1,11 +1,7 @@
-mod backend;
-mod cli;
-mod config;
-mod db;
-mod error;
-mod paths;
-mod render;
-mod search;
+use uman::backend;
+use uman::cli;
+use uman::render;
+use uman::search;
 
 use clap::Parser;
 

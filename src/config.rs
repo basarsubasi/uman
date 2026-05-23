@@ -47,7 +47,7 @@ impl Config {
             .ok_or_else(|| UmanError::BackendNotFound(name.to_string()))
     }
 
-    fn defaults() -> Self {
+    pub fn defaults() -> Self {
         let mut backends = BTreeMap::new();
         backends.insert(
             "linux-upstream".to_string(),
@@ -68,5 +68,90 @@ impl Config {
             },
         );
         Self { backends }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_contains_expected_backends() {
+        let config = Config::defaults();
+        assert!(config.backends.contains_key("linux-upstream"));
+        assert!(config.backends.contains_key("freebsd"));
+        assert_eq!(config.backends.len(), 2);
+    }
+
+    #[test]
+    fn default_backend_fields() {
+        let config = Config::defaults();
+        let linux = config.backends.get("linux-upstream").unwrap();
+        assert_eq!(linux.name, "linux-upstream");
+        assert_eq!(linux.source, "https://github.com/mkerrisk/man-pages");
+        assert_eq!(linux.format, "roff");
+        assert_eq!(linux.fetching, "git");
+    }
+
+    #[test]
+    fn get_backend_found() {
+        let config = Config::defaults();
+        let result = config.get_backend("linux-upstream");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().name, "linux-upstream");
+    }
+
+    #[test]
+    fn get_backend_not_found() {
+        let config = Config::defaults();
+        let result = config.get_backend("nonexistent");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            UmanError::BackendNotFound(name) => assert_eq!(name, "nonexistent"),
+            other => panic!("expected BackendNotFound, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn config_serialization_roundtrip() {
+        let config = Config::defaults();
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: Config = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.backends.len(), config.backends.len());
+        assert!(deserialized.backends.contains_key("linux-upstream"));
+        assert!(deserialized.backends.contains_key("freebsd"));
+    }
+
+    #[test]
+    fn config_pretty_json_structure() {
+        let config = Config::defaults();
+        let json = serde_json::to_string_pretty(&config).unwrap();
+        // Verify it's valid JSON with expected structure
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed["backends"]["linux-upstream"]["source"].is_string());
+        assert!(parsed["backends"]["freebsd"]["format"].is_string());
+    }
+
+    #[test]
+    fn custom_backend_def_roundtrip() {
+        let def = BackendDef {
+            name: "test-backend".to_string(),
+            source: "https://example.com/repo".to_string(),
+            format: "roff".to_string(),
+            fetching: "curl".to_string(),
+        };
+        let json = serde_json::to_string(&def).unwrap();
+        let parsed: BackendDef = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.name, "test-backend");
+        assert_eq!(parsed.source, "https://example.com/repo");
+        assert_eq!(parsed.format, "roff");
+        assert_eq!(parsed.fetching, "curl");
+    }
+
+    #[test]
+    fn backends_are_sorted_in_btreemap() {
+        let config = Config::defaults();
+        let keys: Vec<&String> = config.backends.keys().collect();
+        assert_eq!(keys, &["freebsd", "linux-upstream"]); // BTreeMap is sorted
     }
 }

@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[command(name = "uman", about = "Universal Man Page Reader")]
 pub struct Cli {
     #[command(subcommand)]
@@ -11,7 +11,7 @@ pub struct Cli {
     pub topic: Option<String>,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 pub enum Commands {
     Install {
         backend: String,
@@ -31,7 +31,7 @@ pub enum Commands {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 pub enum BackendAction {
     List,
 }

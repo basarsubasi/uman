@@ -193,3 +193,377 @@ pub fn search(topic: &str) -> anyhow::Result<Vec<(String, i32, String)>> {
         Ok(results)
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- parse_section_and_name ---
+
+    #[test]
+    fn parse_simple_man_page_name() {
+        assert_eq!(
+            parse_section_and_name("execve.2"),
+            Some((2, "execve".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_man_page_with_multiple_dots() {
+        assert_eq!(
+            parse_section_and_name("foo.bar.3"),
+            Some((3, "foo.bar".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_gzipped_man_page() {
+        assert_eq!(
+            parse_section_and_name("printf.3.gz"),
+            Some((3, "printf".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_multi_dot_gzipped() {
+        assert_eq!(
+            parse_section_and_name("foo.bar.1.gz"),
+            Some((1, "foo.bar".to_string()))
+        );
+    }
+
+    #[test]
+    fn reject_no_extension() {
+        assert_eq!(parse_section_and_name("Makefile"), None);
+    }
+
+    #[test]
+    fn reject_non_numeric_extension() {
+        assert_eq!(parse_section_and_name("readme.txt"), None);
+    }
+
+    #[test]
+    fn reject_empty_string() {
+        assert_eq!(parse_section_and_name(""), None);
+    }
+
+    #[test]
+    fn parse_section_1() {
+        assert_eq!(
+            parse_section_and_name("ls.1"),
+            Some((1, "ls".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_section_8() {
+        assert_eq!(
+            parse_section_and_name("mount.8"),
+            Some((8, "mount".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_single_char_name() {
+        assert_eq!(
+            parse_section_and_name("X.7"),
+            Some((7, "X".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_underscore_name() {
+        assert_eq!(
+            parse_section_and_name("__libc_start_main.3"),
+            Some((3, "__libc_start_main".to_string()))
+        );
+    }
+
+    // --- civil_from_days ---
+
+    #[test]
+    fn epoch_day_zero_is_1970_01_01() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+    }
+
+#[test]
+    fn known_date_2024_march_1() {
+        // 2024-03-01 is 19783 days after epoch
+        assert_eq!(civil_from_days(19783), (2024, 3, 1));
+    }
+
+    #[test]
+    fn known_date_2000_01_01() {
+        assert_eq!(civil_from_days(10957), (2000, 1, 1));
+    }
+
+    #[test]
+    fn known_date_1999_12_31() {
+        assert_eq!(civil_from_days(10956), (1999, 12, 31));
+    }
+
+    #[test]
+    fn leap_day_2024_feb_29() {
+        // 2024-02-29 is day 19782
+        assert_eq!(civil_from_days(19782), (2024, 2, 29));
+    }
+
+    #[test]
+    fn negative_days_1969_12_31() {
+        assert_eq!(civil_from_days(-1), (1969, 12, 31));
+    }
+
+    #[test]
+    fn far_future_date() {
+        // 2100-01-01
+        assert_eq!(civil_from_days(47482), (2100, 1, 1));
+    }
+
+    // --- hash_file ---
+
+    #[test]
+    fn hash_file_produces_sha256() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("test.1");
+        std::fs::write(&file_path, "hello world").unwrap();
+        let hash = hash_file(&file_path);
+        assert!(hash.is_some());
+        // SHA-256 of "hello world" is a known 64-char hex string
+        let h = hash.unwrap();
+        assert_eq!(h.len(), 64);
+        assert!(h.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn hash_file_nonexistent_returns_none() {
+        let hash = hash_file(Path::new("/nonexistent/path/file.1"));
+        assert!(hash.is_none());
+    }
+
+    #[test]
+    fn hash_file_deterministic() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("test.1");
+        std::fs::write(&file_path, "consistent content").unwrap();
+        let h1 = hash_file(&file_path);
+        let h2 = hash_file(&file_path);
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn hash_file_differs_for_different_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let f1 = dir.path().join("a.1");
+        let f2 = dir.path().join("b.1");
+        std::fs::write(&f1, "content A").unwrap();
+        std::fs::write(&f2, "content B").unwrap();
+        assert_ne!(hash_file(&f1), hash_file(&f2));
+    }
+
+    // --- collect_man_pages ---
+
+    #[test]
+    fn collect_from_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let pages = collect_man_pages(dir.path());
+        assert!(pages.is_empty());
+    }
+
+    #[test]
+    fn collect_finds_man_pages() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("execve.2"), "man page content").unwrap();
+        std::fs::write(dir.path().join("printf.3"), "another page").unwrap();
+
+        let pages = collect_man_pages(dir.path());
+        assert_eq!(pages.len(), 2);
+
+        let names: Vec<&str> = pages.iter().map(|(_, n, _, _)| n.as_str()).collect();
+        assert!(names.contains(&"execve"));
+        assert!(names.contains(&"printf"));
+    }
+
+    #[test]
+    fn collect_skips_non_man_files() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Makefile"), "build stuff").unwrap();
+        std::fs::write(dir.path().join("README.txt"), "read this").unwrap();
+        std::fs::write(dir.path().join("execve.2"), "man page").unwrap();
+
+        let pages = collect_man_pages(dir.path());
+        assert_eq!(pages.len(), 1);
+        assert_eq!(pages[0].1, "execve");
+    }
+
+    #[test]
+    fn collect_recurses_into_subdirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let subdir = dir.path().join("man2");
+        std::fs::create_dir_all(&subdir).unwrap();
+        std::fs::write(subdir.join("open.2"), "open page").unwrap();
+
+        let pages = collect_man_pages(dir.path());
+        assert_eq!(pages.len(), 1);
+        assert_eq!(pages[0].1, "open");
+    }
+
+    #[test]
+    fn collect_handles_gzipped_files() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("read.2.gz"), "compressed").unwrap();
+
+        let pages = collect_man_pages(dir.path());
+        assert_eq!(pages.len(), 1);
+        assert_eq!(pages[0].1, "read");
+        assert_eq!(pages[0].0, 2);
+    }
+
+    // --- Database operations with test DB ---
+
+    fn create_test_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn
+    }
+
+    #[test]
+    fn db_schema_creates_tables() {
+        let conn = create_test_db();
+
+        // Verify pages table exists
+        let count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='pages'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+
+        // Verify FTS table exists
+        let count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='pages_fts'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn db_insert_and_query() {
+        let conn = create_test_db();
+
+        conn.execute(
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                "test-backend", 2, "execve", "/path/to/execve.2", "roff", "abc123", "2024-01-01T00:00:00Z"
+            ],
+        ).unwrap();
+
+        let name: String = conn
+            .query_row("SELECT name FROM pages WHERE backend = 'test-backend'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(name, "execve");
+    }
+
+    #[test]
+    fn db_unique_constraint() {
+        let conn = create_test_db();
+
+        conn.execute(
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                "test", 2, "dup", "/p", "roff", "h1", "2024-01-01T00:00:00Z"
+            ],
+        ).unwrap();
+
+        // INSERT OR REPLACE should work
+        conn.execute(
+            "INSERT OR REPLACE INTO pages (backend, section, name, path, format, content_hash, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                "test", 2, "dup", "/p2", "roff", "h2", "2024-01-02T00:00:00Z"
+            ],
+        ).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT count(*) FROM pages WHERE backend = 'test'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let path: String = conn
+            .query_row("SELECT path FROM pages WHERE backend = 'test'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(path, "/p2");
+    }
+
+    #[test]
+    fn db_delete_backend() {
+        let conn = create_test_db();
+
+        conn.execute(
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params!["backend-a", 2, "foo", "/a", "roff", "h", "2024-01-01T00:00:00Z"],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params!["backend-b", 3, "bar", "/b", "roff", "h", "2024-01-01T00:00:00Z"],
+        ).unwrap();
+
+        conn.execute("DELETE FROM pages WHERE backend = 'backend-a'", []).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT count(*) FROM pages", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let name: String = conn
+            .query_row("SELECT name FROM pages", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(name, "bar");
+    }
+
+    #[test]
+    fn db_like_search() {
+        let conn = create_test_db();
+
+        for (name, section) in [("execve", 2), ("execveat", 2), ("fexecve", 3), ("open", 2)] {
+            conn.execute(
+                "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    "test", section, name, format!("/{}", name), "roff", "h", "2024-01-01T00:00:00Z"
+                ],
+            ).unwrap();
+        }
+
+        let mut stmt = conn
+            .prepare("SELECT name FROM pages WHERE name LIKE ?1 ORDER BY name")
+            .unwrap();
+        let results: Vec<String> = stmt
+            .query_map(rusqlite::params!["%execve%"], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        assert_eq!(results, vec!["execve", "execveat", "fexecve"]);
+    }
+
+    // --- iso_now format ---
+
+    #[test]
+    fn iso_now_produces_valid_format() {
+        let now = iso_now();
+        // Should match YYYY-MM-DDTHH:MM:SSZ
+        assert!(now.contains('T'), "iso_now should contain 'T': {now}");
+        assert!(now.ends_with('Z'), "iso_now should end with 'Z': {now}");
+        assert_eq!(now.len(), 20, "iso_now should be 20 chars: {now}");
+    }
+}

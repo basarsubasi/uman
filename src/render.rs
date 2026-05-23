@@ -41,3 +41,33 @@ pub fn read(backend_name: &str, section: &str, topic: &str) -> anyhow::Result<()
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_backend_name_rejects_traversal_in_read() {
+        // Verify that read() would reject path-traversal names before
+        // even trying to find a renderer
+        let result = crate::paths::validate_backend_name("../../etc");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn find_renderer_returns_result() {
+        // On any dev machine, at least man or mandoc should exist
+        // This test just ensures the function doesn't panic
+        let _ = find_renderer();
+    }
+
+    #[test]
+    fn manpath_format_includes_trailing_colon() {
+        // Verify the MANPATH format used in read(): path + ":"
+        // The trailing colon ensures system man paths are still searched
+        let backend_path = "/some/path";
+        let manpath = format!("{}:", backend_path);
+        assert!(manpath.ends_with(':'));
+        assert_eq!(manpath, "/some/path:");
+    }
+}

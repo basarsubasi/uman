@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
 fn home_dir() -> PathBuf {
-    std::env::var("HOME")
+    std::env::var("UMAN_HOME")
         .map(PathBuf::from)
+        .or_else(|_| std::env::var("HOME").map(PathBuf::from))
         .unwrap_or_else(|_| dirs::home_dir().expect("Could not determine home directory"))
 }
 
@@ -52,4 +53,65 @@ pub fn validate_backend_name(name: &str) -> anyhow::Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_valid_backend_names() {
+        assert!(validate_backend_name("linux-upstream").is_ok());
+        assert!(validate_backend_name("freebsd").is_ok());
+        assert!(validate_backend_name("my_backend").is_ok());
+        assert!(validate_backend_name("backend123").is_ok());
+        assert!(validate_backend_name("a").is_ok());
+        assert!(validate_backend_name("A-B_C-0").is_ok());
+    }
+
+    #[test]
+    fn reject_invalid_backend_names() {
+        // Path traversal
+        assert!(validate_backend_name("../../etc").is_err());
+        assert!(validate_backend_name("../etc").is_err());
+        assert!(validate_backend_name(".").is_err());
+
+        // Spaces
+        assert!(validate_backend_name("my backend").is_err());
+
+        // Special characters
+        assert!(validate_backend_name("backend!").is_err());
+        assert!(validate_backend_name("backend@host").is_err());
+        assert!(validate_backend_name("backend#1").is_err());
+        assert!(validate_backend_name("back\\end").is_err());
+
+        // Empty
+        assert!(validate_backend_name("").is_err());
+
+        // Unicode
+        assert!(validate_backend_name("bäckend").is_err());
+
+        // Slash
+        assert!(validate_backend_name("back/end").is_err());
+
+        // Null byte concept — name with control chars
+        assert!(validate_backend_name("back\tend").is_err());
+    }
+
+    #[test]
+    fn path_functions_return_expected_structure() {
+        // These tests verify that the path functions produce
+        // paths relative to the home directory structure
+        let dir = data_dir();
+        assert!(dir.to_string_lossy().ends_with(".uman"));
+        assert!(backends_dir().starts_with(&dir));
+        assert!(index_dir().starts_with(&dir));
+
+        let cdir = config_dir();
+        assert!(cdir.to_string_lossy().ends_with("uman"));
+        assert!(config_path().starts_with(&cdir));
+
+        assert!(db_path().to_string_lossy().ends_with("uman.db"));
+        assert_eq!(backend_dir("test"), backends_dir().join("test"));
+    }
 }
