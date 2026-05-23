@@ -1,5 +1,5 @@
 #[derive(Debug, thiserror::Error)]
-pub enum UmanError {
+pub enum UnimanError {
     #[error("backend '{0}' not found in config")]
     BackendNotFound(String),
 
@@ -9,7 +9,7 @@ pub enum UmanError {
     #[error("backend '{0}' is not installed")]
     BackendNotInstalled(String),
 
-    #[error("no default backend set; use 'uman backend default <name>' to set one")]
+    #[error("no default backend set; use 'uniman backend default <name>' to set one")]
     NoDefaultBackend,
 
     #[error("default backend '{0}' is not installed; install it or change the default")]

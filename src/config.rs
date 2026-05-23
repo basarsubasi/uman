@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::UmanError;
+use crate::error::UnimanError;
 use crate::paths;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,13 +132,13 @@ impl Config {
         Ok(())
     }
 
-    pub fn get_backend(&self, name: &str) -> Result<&BackendDef, UmanError> {
+    pub fn get_backend(&self, name: &str) -> Result<&BackendDef, UnimanError> {
         self.backends
             .get(name)
-            .ok_or_else(|| UmanError::BackendNotFound(name.to_string()))
+            .ok_or_else(|| UnimanError::BackendNotFound(name.to_string()))
     }
 
-    pub fn resolve(&self, name: &str) -> Result<&BackendDef, UmanError> {
+    pub fn resolve(&self, name: &str) -> Result<&BackendDef, UnimanError> {
         if let Some(def) = self.backends.get(name) {
             return Ok(def);
         }
@@ -156,19 +156,19 @@ impl Config {
                 }
             }
         }
-        Err(UmanError::BackendNotFound(name.to_string()))
+        Err(UnimanError::BackendNotFound(name.to_string()))
     }
 
-    pub fn get_default_backend(&self) -> Result<&BackendDef, UmanError> {
+    pub fn get_default_backend(&self) -> Result<&BackendDef, UnimanError> {
         let name = self
             .default_backend
             .as_ref()
-            .ok_or(UmanError::NoDefaultBackend)?;
+            .ok_or(UnimanError::NoDefaultBackend)?;
         let def = self.resolve(name).map_err(|_| {
-            UmanError::DefaultNotFoundInConfig(name.clone())
+            UnimanError::DefaultNotFoundInConfig(name.clone())
         })?;
         if !crate::paths::backend_dir(&def.name).exists() {
-            return Err(UmanError::DefaultNotInstalled(def.name.clone()));
+            return Err(UnimanError::DefaultNotInstalled(def.name.clone()));
         }
         Ok(def)
     }
@@ -245,7 +245,7 @@ mod tests {
         let result = config.get_backend("nonexistent");
         assert!(result.is_err());
         match result.unwrap_err() {
-            UmanError::BackendNotFound(name) => assert_eq!(name, "nonexistent"),
+            UnimanError::BackendNotFound(name) => assert_eq!(name, "nonexistent"),
             other => panic!("expected BackendNotFound, got {:?}", other),
         }
     }
@@ -277,7 +277,7 @@ mod tests {
         let result = config.resolve("nope");
         assert!(result.is_err());
         match result.unwrap_err() {
-            UmanError::BackendNotFound(name) => assert_eq!(name, "nope"),
+            UnimanError::BackendNotFound(name) => assert_eq!(name, "nope"),
             other => panic!("expected BackendNotFound, got {:?}", other),
         }
     }
@@ -288,7 +288,7 @@ mod tests {
         let result = config.get_default_backend();
         assert!(result.is_err());
         match result.unwrap_err() {
-            UmanError::NoDefaultBackend => {}
+            UnimanError::NoDefaultBackend => {}
             other => panic!("expected NoDefaultBackend, got {:?}", other),
         }
     }
@@ -300,7 +300,7 @@ mod tests {
         let result = config.get_default_backend();
         assert!(result.is_err());
         match result.unwrap_err() {
-            UmanError::DefaultNotInstalled(name) => assert_eq!(name, "freebsd"),
+            UnimanError::DefaultNotInstalled(name) => assert_eq!(name, "freebsd"),
             other => panic!("expected DefaultNotInstalled, got {:?}", other),
         }
     }
@@ -312,7 +312,7 @@ mod tests {
         let result = config.get_default_backend();
         assert!(result.is_err());
         match result.unwrap_err() {
-            UmanError::DefaultNotFoundInConfig(name) => assert_eq!(name, "totally-bogus"),
+            UnimanError::DefaultNotFoundInConfig(name) => assert_eq!(name, "totally-bogus"),
             other => panic!("expected DefaultNotFoundInConfig, got {:?}", other),
         }
     }
@@ -327,7 +327,7 @@ mod tests {
         let result = config.get_default_backend();
         assert!(result.is_err());
         match result.unwrap_err() {
-            UmanError::DefaultNotFoundInConfig(name) => assert_eq!(name, "nonexistent-alias"),
+            UnimanError::DefaultNotFoundInConfig(name) => assert_eq!(name, "nonexistent-alias"),
             other => panic!("expected DefaultNotFoundInConfig, got {:?}", other),
         }
     }

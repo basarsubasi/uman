@@ -8,11 +8,11 @@ fn home_dir() -> PathBuf {
 }
 
 pub fn config_dir() -> PathBuf {
-    home_dir().join(".config").join("uman")
+    home_dir().join(".config").join("uniman")
 }
 
 pub fn data_dir() -> PathBuf {
-    home_dir().join(".uman")
+    home_dir().join(".uniman")
 }
 
 pub fn config_path() -> PathBuf {
@@ -28,7 +28,7 @@ pub fn index_dir() -> PathBuf {
 }
 
 pub fn db_path() -> PathBuf {
-    index_dir().join("uman.db")
+    index_dir().join("uniman.db")
 }
 
 pub fn backend_dir(name: &str) -> PathBuf {
@@ -103,15 +103,15 @@ mod tests {
         // These tests verify that the path functions produce
         // paths relative to the home directory structure
         let dir = data_dir();
-        assert!(dir.to_string_lossy().ends_with(".uman"));
+        assert!(dir.to_string_lossy().ends_with(".uniman"));
         assert!(backends_dir().starts_with(&dir));
         assert!(index_dir().starts_with(&dir));
 
         let cdir = config_dir();
-        assert!(cdir.to_string_lossy().ends_with("uman"));
+        assert!(cdir.to_string_lossy().ends_with("uniman"));
         assert!(config_path().starts_with(&cdir));
 
-        assert!(db_path().to_string_lossy().ends_with("uman.db"));
+        assert!(db_path().to_string_lossy().ends_with("uniman.db"));
         assert_eq!(backend_dir("test"), backends_dir().join("test"));
     }
 }

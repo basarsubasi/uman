@@ -30,7 +30,7 @@ CREATE VIRTUAL TABLE pages_fts USING fts5(
 ";
 
 static DB: Lazy<Mutex<Connection>> = Lazy::new(|| {
-    paths::ensure_dirs().expect("Failed to create uman directories");
+    paths::ensure_dirs().expect("Failed to create uniman directories");
     let db_path = paths::db_path();
     let conn = Connection::open(&db_path).expect("Failed to open database");
     conn.execute_batch("PRAGMA journal_mode=WAL;").expect("Failed to set WAL mode");

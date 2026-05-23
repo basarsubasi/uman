@@ -1,8 +1,8 @@
 use std::process::{Command, Stdio};
 
-use crate::error::UmanError;
+use crate::error::UnimanError;
 
-pub fn find_renderer() -> Result<String, UmanError> {
+pub fn find_renderer() -> Result<String, UnimanError> {
     for cmd in &["man", "mandoc"] {
         if Command::new(cmd)
             .stdout(Stdio::null())
@@ -16,7 +16,7 @@ pub fn find_renderer() -> Result<String, UmanError> {
             return Ok(cmd.to_string());
         }
     }
-    Err(UmanError::NoRenderer)
+    Err(UnimanError::NoRenderer)
 }
 
 fn build_command(
@@ -49,7 +49,7 @@ pub fn read(backend_name: &str, section: Option<&str>, topic: &str) -> anyhow::R
     let backend_path = crate::paths::backend_dir(backend_name);
 
     if !backend_path.exists() {
-        return Err(UmanError::BackendNotInstalled(backend_name.to_string()).into());
+        return Err(UnimanError::BackendNotInstalled(backend_name.to_string()).into());
     }
 
     let resolved_section = match section {

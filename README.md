@@ -1,15 +1,15 @@
-# `uman` — Universal Man Pages
+# `uniman` — Universal Man Pages
 
-`uman` read man pages from any operating system on any unix machine, natively.
+`uniman` read man pages from any operating system on any unix machine, natively.
 
 ```bash
-uman install linux-upstream
-uman linux execve
+uniman install linux-upstream
+uniman linux execve
 ```
 
 ## Dependencies
 
-`uman` delegates rendering to your system's man page renderer. Make sure you have either `man-db` or `mandoc` on your system.
+`uniman` delegates rendering to your system's man page renderer. Make sure you have either `man-db` or `mandoc` on your system.
 
 `git` is required for cloning backends. `curl` is needed for HTTP-backed backends.
 
@@ -21,27 +21,27 @@ uman linux execve
 ### From source
 
 ```bash
-git clone https://github.com/your-org/uman.git
-cd uman
+git clone https://github.com/your-org/uniman.git
+cd uniman
 cargo install --path .
 ```
 
 
 ## Configuration
 
-`uman` stores its data in two locations:
+`uniman` stores its data in two locations:
 
 | Path | Purpose |
 |------|---------|
-| `~/.config/uman/config.json` | Backend registry and settings |
-| `~/.uman/` | Backend data and SQLite index |
+| `~/.config/uniman/config.json` | Backend registry and settings |
+| `~/.uniman/` | Backend data and SQLite index |
 
 The config file is created automatically on first run with default backends. You can edit it to add custom backends:
 
 To print the config path:
 
 ```bash
-uman config
+uniman config
 ```
 
 ```json
@@ -81,30 +81,30 @@ uman config
 The first backend you install becomes the default automatically. You can read man pages without specifying a backend:
 
 ```bash
-uman execve              # uses default backend
-uman 2 execve            # section + topic with default backend
+uniman execve              # uses default backend
+uniman 2 execve            # section + topic with default backend
 ```
 
 Change or view the default:
 
 ```bash
-uman default              # show current default
-uman default linux        # set by alias
-uman default linux-upstream  # set by name
+uniman default              # show current default
+uniman default linux        # set by alias
+uniman default linux-upstream  # set by name
 ```
 
 ### Storage layout
 
 ```
-~/.config/uman/
+~/.config/uniman/
   config.json 
 
-~/.uman/
+~/.uniman/
   backends/
     linux-upstream/    # raw man pages
     freebsd/
   index/
-    uman.db            # SQLite db
+    uniman.db            # SQLite db
 ```
 
 ## Usage
@@ -112,28 +112,28 @@ uman default linux-upstream  # set by name
 ### Reading man pages
 
 ```bash
-uman <backend> [<section>] <topic>     # explicit backend
-uman <topic>                            # default backend
-uman <section> <topic>                  # default backend with default section
+uniman <backend> [<section>] <topic>     # explicit backend
+uniman <topic>                            # default backend
+uniman <section> <topic>                  # default backend with default section
 ```
 
 ```bash
-uman linux-upstream 2 execve           # full form
-uman linux execve                      # alias, section auto-resolved
-uman execve                            # default backend, default section
-uman 2 execve                          # default backend, explicit section
+uniman linux-upstream 2 execve           # full form
+uniman linux execve                      # alias, section auto-resolved
+uniman execve                            # default backend, default section
+uniman 2 execve                          # default backend, explicit section
 ```
 
 
 ### Installing backends
 
 ```bash
-uman install <backend>
+uniman install <backend>
 ```
 
 ```bash
-uman install linux-upstream
-uman install freebsd
+uniman install linux-upstream
+uniman install freebsd
 ```
 
 The first installed backend is automatically set as the default.
@@ -141,7 +141,7 @@ The first installed backend is automatically set as the default.
 ### Listing backends
 
 ```bash
-uman list
+uniman list
 ```
 
 Output:
@@ -155,12 +155,12 @@ freebsd                         available  roff   https://gitlab.freebsd.org/fre
 ### Listing topics in a backend
 
 ```bash
-uman list <backend>
+uniman list <backend>
 ```
 
 ```bash
-uman list linux-upstream
-uman list linux          # alias works too
+uniman list linux-upstream
+uniman list linux          # alias works too
 ```
 
 Lists every man page topic indexed for that backend, sorted by section then name:
@@ -181,12 +181,12 @@ SEC    NAME                                     DESCRIPTION
 ### Searching
 
 ```bash
-uman search <topic>         # filename search (default)
-uman search -k <keyword>    # keyword search (name + description)
+uniman search <topic>         # filename search (default)
+uniman search -k <keyword>    # keyword search (name + description)
 ```
 
 ```bash
-uman search execve
+uniman search execve
 ```
 
 Output:
@@ -199,7 +199,7 @@ linux-upstream       3          fexecve
 ```
 
 ```bash
-uman search -k execute
+uniman search -k execute
 ```
 
 Output:
@@ -217,7 +217,7 @@ linux-upstream       2          execveat                         execute program
 Add to `~/.bashrc`:
 
 ```bash
-eval "$(uman completion bash)"
+eval "$(uniman completion bash)"
 ```
 
 #### zsh
@@ -225,6 +225,6 @@ eval "$(uman completion bash)"
 Add to `~/.zshrc`:
 
 ```zsh
-eval "$(uman completion zsh)"
+eval "$(uniman completion zsh)"
 ```
 

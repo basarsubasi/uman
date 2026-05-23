@@ -3,7 +3,7 @@ use clap_complete::Shell;
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "uman",
+    name = "uniman",
     about = "Universal Man Page Reader",
     long_about = "Read man pages from any OS locally, without VMs or containers.\n\n\
                   Backends are man page collections (e.g. linux-upstream, freebsd) \

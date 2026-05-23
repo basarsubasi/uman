@@ -2,17 +2,17 @@ use std::io::{self, Write};
 use std::process::Command;
 
 use crate::config::{Config, FetchMethod};
-use crate::error::UmanError;
+use crate::error::UnimanError;
 use crate::paths;
 
-fn check_command_exists(cmd: &str) -> Result<(), UmanError> {
+fn check_command_exists(cmd: &str) -> Result<(), UnimanError> {
     if which_exists(cmd) {
         Ok(())
     } else {
         match cmd {
-            "git" => Err(UmanError::GitNotFound),
-            "curl" => Err(UmanError::CurlNotFound),
-            other => Err(UmanError::CommandFailed {
+            "git" => Err(UnimanError::GitNotFound),
+            "curl" => Err(UnimanError::CurlNotFound),
+            other => Err(UnimanError::CommandFailed {
                 cmd: other.to_string(),
                 stderr: format!("{other} is not installed or not on PATH"),
             }),
@@ -50,7 +50,7 @@ fn run_command(cmd: &str, args: &[&str], error_context: &str) -> anyhow::Result<
             }
             detail.push_str(&stdout);
         }
-        return Err(UmanError::CommandFailed {
+        return Err(UnimanError::CommandFailed {
             cmd: error_context.to_string(),
             stderr: detail,
         }
@@ -68,7 +68,7 @@ pub fn install(name: &str) -> anyhow::Result<()> {
     let dest = paths::backend_dir(canonical);
 
     if dest.exists() {
-        return Err(UmanError::BackendAlreadyInstalled(canonical.to_string()).into());
+        return Err(UnimanError::BackendAlreadyInstalled(canonical.to_string()).into());
     }
 
     paths::ensure_dirs()?;
@@ -156,7 +156,7 @@ pub fn remove(name: &str) -> anyhow::Result<()> {
     let dest = paths::backend_dir(canonical);
 
     if !dest.exists() {
-        return Err(UmanError::BackendNotInstalled(canonical.to_string()).into());
+        return Err(UnimanError::BackendNotInstalled(canonical.to_string()).into());
     }
 
     if config.default_backend.as_deref() == Some(canonical) {
@@ -171,7 +171,7 @@ pub fn remove(name: &str) -> anyhow::Result<()> {
     crate::db::remove_backend_entries(canonical)?;
 
     if config.default_backend.as_deref() == Some(canonical) {
-        eprintln!("warning: '{canonical}' was the default backend. Set a new default with 'uman default <name>'.");
+        eprintln!("warning: '{canonical}' was the default backend. Set a new default with 'uniman default <name>'.");
     }
 
     println!("Backend '{canonical}' removed.");
@@ -249,7 +249,7 @@ pub fn update(name: Option<&str>) -> anyhow::Result<()> {
         let canonical = &def.name;
         let dir = paths::backend_dir(canonical);
         if !dir.exists() {
-            return Err(UmanError::BackendNotInstalled(canonical.to_string()).into());
+            return Err(UnimanError::BackendNotInstalled(canonical.to_string()).into());
         }
 
         update_single(def, &dir)?;
@@ -270,7 +270,7 @@ pub fn update(name: Option<&str>) -> anyhow::Result<()> {
         }
 
         if !any {
-            println!("No backends installed. Use 'uman install <backend>' first.");
+            println!("No backends installed. Use 'uniman install <backend>' first.");
         }
     }
 
@@ -292,7 +292,7 @@ fn update_single(def: &crate::config::BackendDef, dir: &std::path::Path) -> anyh
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                return Err(UmanError::CommandFailed {
+                return Err(UnimanError::CommandFailed {
                     cmd: format!("git pull for '{}'", def.name),
                     stderr,
                 }
@@ -379,13 +379,13 @@ pub fn list_topics(name: &str) -> anyhow::Result<()> {
     let canonical = &backend.name;
 
     if !paths::backend_dir(canonical).exists() {
-        return Err(UmanError::BackendNotInstalled(canonical.to_string()).into());
+        return Err(UnimanError::BackendNotInstalled(canonical.to_string()).into());
     }
 
     let topics = crate::db::list_topics_for_backend(canonical)?;
 
     if topics.is_empty() {
-        println!("No topics indexed for backend '{canonical}'. Try 'uman update {canonical}'.");
+        println!("No topics indexed for backend '{canonical}'. Try 'uniman update {canonical}'.");
         return Ok(());
     }
 
@@ -413,7 +413,7 @@ pub fn set_default(name: &str) -> anyhow::Result<()> {
     let canonical = &backend.name;
 
     if !paths::backend_dir(canonical).exists() {
-        return Err(UmanError::DefaultNotInstalled(canonical.clone()).into());
+        return Err(UnimanError::DefaultNotInstalled(canonical.clone()).into());
     }
 
     let mut config = Config::load()?;

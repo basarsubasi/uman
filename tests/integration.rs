@@ -11,14 +11,14 @@ impl TestEnv {
     fn new() -> Self {
         let temp = tempfile::tempdir().unwrap();
         let home = temp.path().to_path_buf();
-        std::fs::create_dir_all(home.join(".config").join("uman")).unwrap();
-        std::fs::create_dir_all(home.join(".uman").join("backends")).unwrap();
-        std::fs::create_dir_all(home.join(".uman").join("index")).unwrap();
+        std::fs::create_dir_all(home.join(".config").join("uniman")).unwrap();
+        std::fs::create_dir_all(home.join(".uniman").join("backends")).unwrap();
+        std::fs::create_dir_all(home.join(".uniman").join("index")).unwrap();
         Self { home, _temp: temp }
     }
 
     fn config_path(&self) -> PathBuf {
-        self.home.join(".config").join("uman").join("config.json")
+        self.home.join(".config").join("uniman").join("config.json")
     }
 }
 
@@ -51,7 +51,7 @@ fn config_deserialization_with_defaults() {
         }
     });
 
-    let config: uman::config::Config = serde_json::from_value(json_data).unwrap();
+    let config: uniman::config::Config = serde_json::from_value(json_data).unwrap();
     assert_eq!(config.backends.len(), 2);
     assert!(config.backends.contains_key("linux-upstream"));
     assert!(config.backends.contains_key("freebsd"));
@@ -70,10 +70,10 @@ fn config_custom_backend_deserialization() {
         }
     });
 
-    let config: uman::config::Config = serde_json::from_value(json_data).unwrap();
+    let config: uniman::config::Config = serde_json::from_value(json_data).unwrap();
     let def = config.backends.get("my-custom").unwrap();
     assert_eq!(def.source, "https://example.com/repo");
-    assert_eq!(def.fetching, uman::config::FetchMethod::Curl);
+    assert_eq!(def.fetching, uniman::config::FetchMethod::Curl);
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn config_invalid_json_fails() {
     let env = TestEnv::new();
     std::fs::write(env.config_path(), "not valid json {{{").unwrap();
     let content = std::fs::read_to_string(env.config_path()).unwrap();
-    let result: Result<uman::config::Config, _> = serde_json::from_str(&content);
+    let result: Result<uniman::config::Config, _> = serde_json::from_str(&content);
     assert!(result.is_err());
 }
 
@@ -110,7 +110,7 @@ fn config_empty_backends_is_valid() {
     let json_data = serde_json::json!({
         "backends": {}
     });
-    let config: uman::config::Config = serde_json::from_value(json_data).unwrap();
+    let config: uniman::config::Config = serde_json::from_value(json_data).unwrap();
     assert!(config.backends.is_empty());
 }
 
@@ -118,44 +118,44 @@ fn config_empty_backends_is_valid() {
 
 #[test]
 fn path_traversal_blocked_in_backend_dir() {
-    let _bad_dir = uman::paths::backend_dir("../../etc");
+    let _bad_dir = uniman::paths::backend_dir("../../etc");
     // The directory path should not resolve to /etc
     // (Path::join does NOT normalize .. on its own, but the
     // validate_backend_name function blocks it before we get here)
-    assert!(uman::paths::validate_backend_name("../../etc").is_err());
+    assert!(uniman::paths::validate_backend_name("../../etc").is_err());
 }
 
 #[test]
 fn backend_names_with_various_patterns() {
     // Valid
-    assert!(uman::paths::validate_backend_name("a").is_ok());
-    assert!(uman::paths::validate_backend_name("linux-upstream").is_ok());
-    assert!(uman::paths::validate_backend_name("my_backend_v2").is_ok());
-    assert!(uman::paths::validate_backend_name("ABC").is_ok());
-    assert!(uman::paths::validate_backend_name("123").is_ok());
+    assert!(uniman::paths::validate_backend_name("a").is_ok());
+    assert!(uniman::paths::validate_backend_name("linux-upstream").is_ok());
+    assert!(uniman::paths::validate_backend_name("my_backend_v2").is_ok());
+    assert!(uniman::paths::validate_backend_name("ABC").is_ok());
+    assert!(uniman::paths::validate_backend_name("123").is_ok());
 
     // Invalid
-    assert!(uman::paths::validate_backend_name("").is_err());
-    assert!(uman::paths::validate_backend_name("has space").is_err());
-    assert!(uman::paths::validate_backend_name("has.dot").is_err());
-    assert!(uman::paths::validate_backend_name("has/slash").is_err());
-    assert!(uman::paths::validate_backend_name("has\\backslash").is_err());
-    assert!(uman::paths::validate_backend_name("has:colon").is_err());
-    assert!(uman::paths::validate_backend_name("..").is_err());
-    assert!(uman::paths::validate_backend_name(".").is_err());
+    assert!(uniman::paths::validate_backend_name("").is_err());
+    assert!(uniman::paths::validate_backend_name("has space").is_err());
+    assert!(uniman::paths::validate_backend_name("has.dot").is_err());
+    assert!(uniman::paths::validate_backend_name("has/slash").is_err());
+    assert!(uniman::paths::validate_backend_name("has\\backslash").is_err());
+    assert!(uniman::paths::validate_backend_name("has:colon").is_err());
+    assert!(uniman::paths::validate_backend_name("..").is_err());
+    assert!(uniman::paths::validate_backend_name(".").is_err());
 }
 
 // ---------- Backend operations ----------
 
 #[test]
 fn backend_remove_nonexistent_errors() {
-    let result = uman::backend::remove("nonexistent");
+    let result = uniman::backend::remove("nonexistent");
     assert!(result.is_err());
 }
 
 #[test]
 fn install_rejects_invalid_backend_name() {
-    let result = uman::backend::install("../../etc");
+    let result = uniman::backend::install("../../etc");
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(err_msg.contains("invalid backend name"));
@@ -163,7 +163,7 @@ fn install_rejects_invalid_backend_name() {
 
 #[test]
 fn remove_rejects_invalid_backend_name() {
-    let result = uman::backend::remove("bad name");
+    let result = uniman::backend::remove("bad name");
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(err_msg.contains("invalid backend name"));
@@ -171,7 +171,7 @@ fn remove_rejects_invalid_backend_name() {
 
 #[test]
 fn read_rejects_invalid_backend_name() {
-    let result = uman::render::read("..", Some("2"), "open");
+    let result = uniman::render::read("..", Some("2"), "open");
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(err_msg.contains("invalid backend name"));
@@ -179,7 +179,7 @@ fn read_rejects_invalid_backend_name() {
 
 #[test]
 fn update_rejects_invalid_backend_name() {
-    let result = uman::backend::update(Some("bad!name"));
+    let result = uniman::backend::update(Some("bad!name"));
     assert!(result.is_err());
 }
 
@@ -311,35 +311,35 @@ fn db_like_search_works() {
 #[test]
 fn error_messages_are_human_readable() {
     assert_eq!(
-        uman::error::UmanError::BackendNotFound("my-backend".to_string()).to_string(),
+        uniman::error::UnimanError::BackendNotFound("my-backend".to_string()).to_string(),
         "backend 'my-backend' not found in config"
     );
     assert_eq!(
-        uman::error::UmanError::BackendAlreadyInstalled("test".to_string()).to_string(),
+        uniman::error::UnimanError::BackendAlreadyInstalled("test".to_string()).to_string(),
         "backend 'test' is already installed"
     );
     assert_eq!(
-        uman::error::UmanError::BackendNotInstalled("foo".to_string()).to_string(),
+        uniman::error::UnimanError::BackendNotInstalled("foo".to_string()).to_string(),
         "backend 'foo' is not installed"
     );
     assert_eq!(
-        uman::error::UmanError::NoRenderer.to_string(),
+        uniman::error::UnimanError::NoRenderer.to_string(),
         "no man page renderer found (install man-db or mandoc)"
     );
     assert_eq!(
-        uman::error::UmanError::CommandFailed { cmd: "git clone https://example.com".to_string(), stderr: "fatal: not found".to_string() }.to_string(),
+        uniman::error::UnimanError::CommandFailed { cmd: "git clone https://example.com".to_string(), stderr: "fatal: not found".to_string() }.to_string(),
         "command 'git clone https://example.com' failed: fatal: not found"
     );
     assert_eq!(
-        uman::error::UmanError::NoDefaultBackend.to_string(),
-        "no default backend set; use 'uman backend default <name>' to set one"
+        uniman::error::UnimanError::NoDefaultBackend.to_string(),
+        "no default backend set; use 'uniman backend default <name>' to set one"
     );
     assert_eq!(
-        uman::error::UmanError::DefaultNotInstalled("linux-upstream".to_string()).to_string(),
+        uniman::error::UnimanError::DefaultNotInstalled("linux-upstream".to_string()).to_string(),
         "default backend 'linux-upstream' is not installed; install it or change the default"
     );
     assert_eq!(
-        uman::error::UmanError::DefaultNotFoundInConfig("bogus".to_string()).to_string(),
+        uniman::error::UnimanError::DefaultNotFoundInConfig("bogus".to_string()).to_string(),
         "default backend 'bogus' not found in config; check the name or add it to your config"
     );
 }
@@ -385,20 +385,20 @@ fn collect_man_pages_skips_non_man_and_recurses() {
 
 #[test]
 fn config_get_backend_returns_correct_definition() {
-    let config = uman::config::Config::defaults();
+    let config = uniman::config::Config::defaults();
     let be = config.get_backend("linux-upstream").unwrap();
     assert_eq!(be.name, "linux-upstream");
-    assert_eq!(be.format, uman::config::ManFormat::Roff);
-    assert_eq!(be.fetching, uman::config::FetchMethod::Git);
+    assert_eq!(be.format, uniman::config::ManFormat::Roff);
+    assert_eq!(be.fetching, uniman::config::FetchMethod::Git);
 }
 
 #[test]
 fn config_get_backend_errors_on_unknown() {
-    let config = uman::config::Config::defaults();
+    let config = uniman::config::Config::defaults();
     let result = config.get_backend("does-not-exist");
     assert!(result.is_err());
     match result.unwrap_err() {
-        uman::error::UmanError::BackendNotFound(name) => assert_eq!(name, "does-not-exist"),
+        uniman::error::UnimanError::BackendNotFound(name) => assert_eq!(name, "does-not-exist"),
         other => panic!("expected BackendNotFound, got {:?}", other),
     }
 }
@@ -407,32 +407,32 @@ fn config_get_backend_errors_on_unknown() {
 
 #[test]
 fn config_resolve_finds_canonical_name() {
-    let config = uman::config::Config::defaults();
+    let config = uniman::config::Config::defaults();
     let def = config.resolve("linux-upstream").unwrap();
     assert_eq!(def.name, "linux-upstream");
 }
 
 #[test]
 fn config_resolve_finds_alias() {
-    let config = uman::config::Config::defaults();
+    let config = uniman::config::Config::defaults();
     let def = config.resolve("linux").unwrap();
     assert_eq!(def.name, "linux-upstream");
 }
 
 #[test]
 fn config_resolve_finds_bsd_alias() {
-    let config = uman::config::Config::defaults();
+    let config = uniman::config::Config::defaults();
     let def = config.resolve("bsd").unwrap();
     assert_eq!(def.name, "freebsd");
 }
 
 #[test]
 fn config_resolve_errors_on_unknown() {
-    let config = uman::config::Config::defaults();
+    let config = uniman::config::Config::defaults();
     let result = config.resolve("nope");
     assert!(result.is_err());
     match result.unwrap_err() {
-        uman::error::UmanError::BackendNotFound(name) => assert_eq!(name, "nope"),
+        uniman::error::UnimanError::BackendNotFound(name) => assert_eq!(name, "nope"),
         other => panic!("expected BackendNotFound, got {:?}", other),
     }
 }
@@ -441,21 +441,21 @@ fn config_resolve_errors_on_unknown() {
 
 #[test]
 fn config_no_default_backend_errors() {
-    let config = uman::config::Config::defaults();
+    let config = uniman::config::Config::defaults();
     let result = config.get_default_backend();
     assert!(result.is_err());
     match result.unwrap_err() {
-        uman::error::UmanError::NoDefaultBackend => {}
+        uniman::error::UnimanError::NoDefaultBackend => {}
         other => panic!("expected NoDefaultBackend, got {:?}", other),
     }
 }
 
 #[test]
 fn config_default_backend_not_installed_errors() {
-    let mut config = uman::config::Config::defaults();
+    let mut config = uniman::config::Config::defaults();
     // Use freebsd which is in config but (likely) not installed
     // If freebsd IS installed, use a synthetic backend name instead
-    let test_name = if std::path::Path::new(&std::env::var("HOME").unwrap()).join(".uman/backends/freebsd").exists() {
+    let test_name = if std::path::Path::new(&std::env::var("HOME").unwrap()).join(".uniman/backends/freebsd").exists() {
         "__test_nonexistent__"
     } else {
         "freebsd"
@@ -464,22 +464,22 @@ fn config_default_backend_not_installed_errors() {
     let result = config.get_default_backend();
     assert!(result.is_err());
     match result.unwrap_err() {
-        uman::error::UmanError::DefaultNotInstalled(name) => assert_eq!(name, test_name),
-        uman::error::UmanError::DefaultNotFoundInConfig(name) => assert_eq!(name, test_name),
+        uniman::error::UnimanError::DefaultNotInstalled(name) => assert_eq!(name, test_name),
+        uniman::error::UnimanError::DefaultNotFoundInConfig(name) => assert_eq!(name, test_name),
         other => panic!("expected DefaultNotInstalled or DefaultNotFoundInConfig, got {:?}", other),
     }
 }
 
 #[test]
 fn config_default_backend_via_alias_not_installed_errors() {
-    let mut config = uman::config::Config::defaults();
+    let mut config = uniman::config::Config::defaults();
     config.default_backend = Some("bsd".to_string());
     let result = config.get_default_backend();
     // "bsd" resolves to "freebsd" which is likely not installed
     // If it IS installed (unlikely), skip this test gracefully
     match result {
-        Err(uman::error::UmanError::DefaultNotInstalled(_)) => {},
-        Err(uman::error::UmanError::DefaultNotFoundInConfig(_)) => {},
+        Err(uniman::error::UnimanError::DefaultNotInstalled(_)) => {},
+        Err(uniman::error::UnimanError::DefaultNotFoundInConfig(_)) => {},
         Ok(_) => {}, // freebsd is actually installed — fine, skip
         other => panic!("unexpected result: {:?}", other),
     }
@@ -489,7 +489,7 @@ fn config_default_backend_via_alias_not_installed_errors() {
 
 #[test]
 fn config_serialization_with_aliases() {
-    let config = uman::config::Config::defaults();
+    let config = uniman::config::Config::defaults();
     let json = serde_json::to_string_pretty(&config).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     // linux-upstream should have aliases array with "linux"
@@ -511,7 +511,7 @@ fn config_deserialization_with_default_backend() {
         },
         "default_backend": "linux-upstream"
     });
-    let config: uman::config::Config = serde_json::from_value(json_data).unwrap();
+    let config: uniman::config::Config = serde_json::from_value(json_data).unwrap();
     assert_eq!(config.default_backend, Some("linux-upstream".to_string()));
     let def = config.backends.get("linux-upstream").unwrap();
     assert_eq!(def.aliases, vec!["linux".to_string()]);
@@ -529,7 +529,7 @@ fn config_deserialization_without_default_backend() {
             }
         }
     });
-    let config: uman::config::Config = serde_json::from_value(json_data).unwrap();
+    let config: uniman::config::Config = serde_json::from_value(json_data).unwrap();
     assert!(config.default_backend.is_none());
 }
 
@@ -545,7 +545,7 @@ fn config_deserialization_without_aliases() {
             }
         }
     });
-    let config: uman::config::Config = serde_json::from_value(json_data).unwrap();
+    let config: uniman::config::Config = serde_json::from_value(json_data).unwrap();
     let def = config.backends.get("my-backend").unwrap();
     assert!(def.aliases.is_empty());
 }

@@ -1,9 +1,9 @@
-use uman::backend;
-use uman::cli;
-use uman::config::Config;
-use uman::paths;
-use uman::render;
-use uman::search;
+use uniman::backend;
+use uniman::cli;
+use uniman::config::Config;
+use uniman::paths;
+use uniman::render;
+use uniman::search;
 
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
             }
             cli::Commands::Completion { shell } => {
                 let mut cmd = cli::Cli::command();
-                generate(shell, &mut cmd, "uman", &mut std::io::stdout());
+                generate(shell, &mut cmd, "uniman", &mut std::io::stdout());
             }
             cli::Commands::Default { name } => match name {
                 Some(n) => backend::set_default(&n)?,
@@ -69,12 +69,12 @@ fn dispatch_read(
     let resolved = backend_def.ok();
 
     match (resolved, second, third, is_backend, is_numeric(&first)) {
-        // uman <backend> <section> <topic>
+        // uniman <backend> <section> <topic>
         (Some(def), Some(sec), Some(top), _, _) => {
             render::read(&def.name, Some(&sec), &top)?;
         }
 
-        // uman <backend> <topic>  (2 args, first resolves as backend)
+        // uniman <backend> <topic>  (2 args, first resolves as backend)
         (Some(def), Some(top), None, _, _) => {
             render::read(&def.name, None, &top)?;
         }
@@ -85,13 +85,13 @@ fn dispatch_read(
             std::process::exit(1);
         }
 
-        // uman <section> <topic>  (2 args, first is numeric, not a backend)
+        // uniman <section> <topic>  (2 args, first is numeric, not a backend)
         (None, Some(top), None, false, true) => {
             let default_def = config.get_default_backend()?;
             render::read(&default_def.name, Some(&first), &top)?;
         }
 
-        // uman <topic>  (1 arg, not a backend, not numeric)
+        // uniman <topic>  (1 arg, not a backend, not numeric)
         (None, None, None, false, false) => {
             let default_def = config.get_default_backend()?;
             render::read(&default_def.name, None, &first)?;
@@ -110,16 +110,16 @@ fn dispatch_read(
 }
 
 fn print_usage() {
-    eprintln!("usage: uman <backend> [<section>] <topic>");
-    eprintln!("       uman <topic>                          (uses default backend)");
-    eprintln!("       uman <section> <topic>                 (uses default backend)");
-    eprintln!("       uman install <backend>");
-    eprintln!("       uman remove <backend>");
-    eprintln!("       uman update [<backend>]");
-    eprintln!("       uman search [-k] <topic>");
-    eprintln!("       uman list");
-    eprintln!("       uman list <backend>");
-    eprintln!("       uman config");
-    eprintln!("       uman completion <shell>");
-    eprintln!("       uman default [<name>]");
+    eprintln!("usage: uniman <backend> [<section>] <topic>");
+    eprintln!("       uniman <topic>                          (uses default backend)");
+    eprintln!("       uniman <section> <topic>                 (uses default backend)");
+    eprintln!("       uniman install <backend>");
+    eprintln!("       uniman remove <backend>");
+    eprintln!("       uniman update [<backend>]");
+    eprintln!("       uniman search [-k] <topic>");
+    eprintln!("       uniman list");
+    eprintln!("       uniman list <backend>");
+    eprintln!("       uniman config");
+    eprintln!("       uniman completion <shell>");
+    eprintln!("       uniman default [<name>]");
 }
