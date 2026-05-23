@@ -15,7 +15,7 @@ fn parse_read_three_args() {
 fn parse_install() {
     let cli = uniman::cli::Cli::try_parse_from(["uniman", "install", "linux-upstream"]).unwrap();
     match cli.command {
-        Some(Commands::Install { backend }) => assert_eq!(backend, "linux-upstream"),
+        Some(Commands::Install { backend }) => assert_eq!(backend.as_deref(), Some("linux-upstream")),
         other => panic!("expected Install, got {:?}", other),
     }
 }
@@ -157,7 +157,7 @@ fn subcommands_take_priority_over_positional() {
     let cli = uniman::cli::Cli::try_parse_from(["uniman", "install", "mybackend"]).unwrap();
     assert!(cli.backend.is_none()); // "install" should not be captured as backend
     match cli.command {
-        Some(Commands::Install { backend }) => assert_eq!(backend, "mybackend"),
+        Some(Commands::Install { backend }) => assert_eq!(backend.as_deref(), Some("mybackend")),
         other => panic!("expected Install, got {:?}", other),
     }
 }

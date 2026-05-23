@@ -59,10 +59,59 @@ fn run_command(cmd: &str, args: &[&str], error_context: &str) -> anyhow::Result<
     Ok(())
 }
 
-pub fn install(name: &str) -> anyhow::Result<()> {
+pub fn install(name: Option<&str>) -> anyhow::Result<()> {
+    let config = Config::load()?;
+
+    if let Some(n) = name {
+        install_single(&config, n)?;
+        
+        let mut config = Config::load()?;
+        if config.default_backend.is_none() {
+            let backend_name = config.resolve(n)?.name.clone();
+            config.default_backend = Some(backend_name.clone());
+            config.save()?;
+            println!("Default backend set to '{}'.", backend_name);
+        }
+    } else {
+        let mut any_installed = false;
+        let mut any = false;
+
+        for (backend_name, _) in &config.backends {
+            any = true;
+            match install_single(&config, backend_name) {
+                Ok(()) => {
+                    any_installed = true;
+                }
+                Err(e) => {
+                    if e.to_string().contains("already installed") {
+                        println!("Backend '{backend_name}' is already installed.");
+                    } else {
+                        eprintln!("warning: failed to install '{backend_name}': {e}");
+                    }
+                }
+            }
+        }
+
+        if !any {
+            println!("No backends configured in config.");
+        } else if any_installed {
+            let mut config = Config::load()?;
+            if config.default_backend.is_none() {
+                if let Some((name, _)) = config.backends.first_key_value() {
+                    config.default_backend = Some(name.clone());
+                    config.save()?;
+                    println!("Default backend set to '{name}'.");
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn install_single(config: &Config, name: &str) -> anyhow::Result<()> {
     paths::validate_backend_name(name)?;
 
-    let config = Config::load()?;
     let backend = config.resolve(name)?;
     let canonical = &backend.name;
     let dest = paths::backend_dir(canonical);
@@ -93,13 +142,6 @@ pub fn install(name: &str) -> anyhow::Result<()> {
 
     println!("Backend '{canonical}' installed successfully.");
     crate::db::index_backend(backend)?;
-
-    let mut config = Config::load()?;
-    if config.default_backend.is_none() {
-        config.default_backend = Some(canonical.clone());
-        config.save()?;
-        println!("Default backend set to '{canonical}'.");
-    }
 
     Ok(())
 }

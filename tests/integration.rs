@@ -155,7 +155,7 @@ fn backend_remove_nonexistent_errors() {
 
 #[test]
 fn install_rejects_invalid_backend_name() {
-    let result = uniman::backend::install("../../etc");
+    let result = uniman::backend::install(Some("../../etc"));
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(err_msg.contains("invalid backend name"));

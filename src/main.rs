@@ -33,7 +33,7 @@ fn main() -> anyhow::Result<()> {
                 None => backend::show_default()?,
             },
             cli::Commands::Install { backend } => {
-                backend::install(&backend)?;
+                backend::install(backend.as_deref())?;
             }
             cli::Commands::Remove { backend } => {
                 backend::remove(&backend)?;
