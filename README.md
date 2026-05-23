@@ -16,8 +16,7 @@ uniman freebsd execve
 
 `fzf` is required for the interactive search and listing menus.
 
-
-## Installation
+## Installation
 
 ### From Source
 
@@ -27,7 +26,7 @@ cd uniman
 cargo install --path .
 ```
 
-## Configuration
+## Configuration
 
 `uniman` stores its data in two locations:
 
