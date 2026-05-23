@@ -91,13 +91,13 @@ fn dispatch_read(
 
         // uniman <section> <topic>  (2 args, first is numeric, not a backend)
         (None, Some(top), None, false, true) => {
-            let default_def = config.get_default_backend()?;
+            let default_def = get_or_prompt_default_backend(&config)?;
             render::read(&default_def.name, Some(&first), &top)?;
         }
 
         // uniman <topic>  (1 arg, not a backend, not numeric)
         (None, None, None, false, false) => {
-            let default_def = config.get_default_backend()?;
+            let default_def = get_or_prompt_default_backend(&config)?;
             render::read(&default_def.name, None, &first)?;
         }
 
@@ -111,6 +111,27 @@ fn dispatch_read(
     }
 
     Ok(())
+}
+
+fn get_or_prompt_default_backend(config: &config::Config) -> anyhow::Result<config::BackendDef> {
+    match config.get_default_backend() {
+        Ok(def) => Ok(def.clone()),
+        Err(uniman::error::UnimanError::DefaultNotInstalled(name)) => {
+            use std::io::Write;
+            eprint!("Default backend '{name}' is not installed. Install now? [Y/n] ");
+            std::io::stderr().flush()?;
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            let input = input.trim().to_lowercase();
+            if input.is_empty() || input == "y" || input == "yes" {
+                backend::install(Some(&name))?;
+                config.get_default_backend().map(|d| d.clone()).map_err(|e| e.into())
+            } else {
+                anyhow::bail!("Aborted. Default backend must be installed to read man pages.");
+            }
+        }
+        Err(e) => Err(e.into()),
+    }
 }
 
 fn print_usage() {
