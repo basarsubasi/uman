@@ -171,7 +171,7 @@ fn remove_rejects_invalid_backend_name() {
 
 #[test]
 fn read_rejects_invalid_backend_name() {
-    let result = uman::render::read("..", "2", "open");
+    let result = uman::render::read("..", Some("2"), "open");
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(err_msg.contains("invalid backend name"));
@@ -190,13 +190,14 @@ fn db_schema_and_basic_operations() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
 
-    // Create schema
+    // Create schema with description column
     conn.execute_batch("
         CREATE TABLE IF NOT EXISTS pages (
             id INTEGER PRIMARY KEY,
             backend TEXT NOT NULL,
             section INTEGER NOT NULL,
             name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
             path TEXT NOT NULL,
             format TEXT NOT NULL,
             content_hash TEXT NOT NULL,
@@ -204,15 +205,15 @@ fn db_schema_and_basic_operations() {
             UNIQUE(backend, section, name)
         );
         CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
-            name, content='pages', content_rowid='id'
+            name, description, content='pages', content_rowid='id'
         );
     ").unwrap();
 
     // Insert
     conn.execute(
-        "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        rusqlite::params!["test-be", 2, "open", "/man2/open.2", "roff", "hash123", "2024-01-01T00:00:00Z"],
+        "INSERT INTO pages (backend, section, name, description, path, format, content_hash, last_updated)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        rusqlite::params!["test-be", 2, "open", "open and possibly create a file", "/man2/open.2", "roff", "hash123", "2024-01-01T00:00:00Z"],
     ).unwrap();
 
     // Query
@@ -221,11 +222,17 @@ fn db_schema_and_basic_operations() {
         .unwrap();
     assert_eq!(name, "open");
 
+    // Verify description
+    let desc: String = conn
+        .query_row("SELECT description FROM pages WHERE backend = 'test-be'", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(desc, "open and possibly create a file");
+
     // Unique constraint: INSERT OR REPLACE
     conn.execute(
-        "INSERT OR REPLACE INTO pages (backend, section, name, path, format, content_hash, last_updated)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        rusqlite::params!["test-be", 2, "open", "/man2/open.2.v2", "roff", "hash456", "2024-01-02T00:00:00Z"],
+        "INSERT OR REPLACE INTO pages (backend, section, name, description, path, format, content_hash, last_updated)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        rusqlite::params!["test-be", 2, "open", "open and possibly create a file", "/man2/open.2.v2", "roff", "hash456", "2024-01-02T00:00:00Z"],
     ).unwrap();
 
     let count: i64 = conn
@@ -256,6 +263,7 @@ fn db_like_search_works() {
             backend TEXT NOT NULL,
             section INTEGER NOT NULL,
             name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
             path TEXT NOT NULL,
             format TEXT NOT NULL,
             content_hash TEXT NOT NULL,
@@ -267,10 +275,10 @@ fn db_like_search_works() {
     // Insert test data
     for (name, section) in [("execve", 2), ("execveat", 2), ("fexecve", 3), ("open", 2)] {
         conn.execute(
-            "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO pages (backend, section, name, description, path, format, content_hash, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![
-                "test", section, name, format!("/{}", name), "roff", "h", "2024-01-01T00:00:00Z"
+                "test", section, name, "", format!("/{}", name), "roff", "h", "2024-01-01T00:00:00Z"
             ],
         ).unwrap();
     }

@@ -13,15 +13,19 @@ CREATE TABLE IF NOT EXISTS pages (
     backend TEXT NOT NULL,
     section INTEGER NOT NULL,
     name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
     path TEXT NOT NULL,
     format TEXT NOT NULL,
     content_hash TEXT NOT NULL,
     last_updated TEXT NOT NULL,
     UNIQUE(backend, section, name)
 );
+";
 
-CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
-    name, content='pages', content_rowid='id'
+const SCHEMA_V2_FTS: &str = "
+DROP TABLE IF EXISTS pages_fts;
+CREATE VIRTUAL TABLE pages_fts USING fts5(
+    name, description, content='pages', content_rowid='id'
 );
 ";
 
@@ -31,8 +35,29 @@ static DB: Lazy<Mutex<Connection>> = Lazy::new(|| {
     let conn = Connection::open(&db_path).expect("Failed to open database");
     conn.execute_batch("PRAGMA journal_mode=WAL;").expect("Failed to set WAL mode");
     conn.execute_batch(SCHEMA).expect("Failed to initialize schema");
+    migrate_schema(&conn).expect("Failed to migrate schema");
     Mutex::new(conn)
 });
+
+fn migrate_schema(conn: &Connection) -> anyhow::Result<()> {
+    // Add description column if it doesn't exist (migration from v1 to v2)
+    let has_description: bool = conn
+        .query_row(
+            "SELECT count(*) > 0 FROM pragma_table_info('pages') WHERE name='description'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+
+    if !has_description {
+        conn.execute_batch("ALTER TABLE pages ADD COLUMN description TEXT NOT NULL DEFAULT '';")?;
+    }
+
+    // Recreate FTS table with the new schema (safe to rerun)
+    conn.execute_batch(SCHEMA_V2_FTS)?;
+    conn.execute("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')", [])?;
+    Ok(())
+}
 
 pub fn with_conn<F, T>(f: F) -> anyhow::Result<T>
 where
@@ -61,7 +86,67 @@ fn hash_file(path: &Path) -> Option<String> {
     Some(format!("{:x}", hasher.finalize()))
 }
 
-fn collect_man_pages(dir: &Path) -> Vec<(i32, String, String, String)> {
+fn extract_description(file_path: &Path) -> String {
+    let content = match std::fs::read_to_string(file_path) {
+        Ok(c) => c,
+        Err(_) => return String::new(),
+    };
+
+    let mut in_name_section = false;
+    let mut description_lines: Vec<String> = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with(".SH") || trimmed.starts_with(".Sh") {
+            let section_name = trimmed[3..].trim().to_lowercase();
+            if section_name == "name" {
+                in_name_section = true;
+                continue;
+            } else if in_name_section {
+                break;
+            }
+        }
+
+        if in_name_section {
+            // Skip empty lines and roff commands
+            if trimmed.is_empty() || trimmed.starts_with('.') {
+                continue;
+            }
+
+            // This is a line in the NAME section
+            description_lines.push(trimmed.to_string());
+        }
+    }
+
+    if description_lines.is_empty() {
+        return String::new();
+    }
+
+    let raw = description_lines.join(" ");
+
+    // Clean up roff formatting
+    let cleaned = raw
+        .replace("\\- ", "- ")
+        .replace("\\-", "-")
+        .replace("\\fB", "")
+        .replace("\\fI", "")
+        .replace("\\fP", "")
+        .replace("\\fR", "")
+        .replace("\\&", "")
+        .replace("\\(tm", "TM")
+        .replace("\\(reg", "(R)")
+        .replace("  ", " ");
+
+    // Strip the name portion before " - " to leave just the description
+    if let Some(idx) = cleaned.find(" - ") {
+        cleaned[idx + 3..].trim().to_string()
+    } else {
+        cleaned.trim().to_string()
+    }
+}
+
+fn collect_man_pages(dir: &Path) -> Vec<(i32, String, String, String, String)> {
     let mut pages = Vec::new();
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -76,7 +161,8 @@ fn collect_man_pages(dir: &Path) -> Vec<(i32, String, String, String)> {
                 if let Some((section, name)) = parse_section_and_name(&file_name) {
                     let path_str = path.to_string_lossy().to_string();
                     if let Some(hash) = hash_file(&path) {
-                        pages.push((section, name, path_str, hash));
+                        let description = extract_description(&path);
+                        pages.push((section, name, path_str, hash, description));
                     }
                 }
             }
@@ -129,13 +215,11 @@ pub fn index_backend(backend: &BackendDef) -> anyhow::Result<()> {
     let format_str = backend.format.to_string();
 
     with_conn(|conn| {
-        // Build a set of (section, name, hash) from the filesystem
         let fs_pages: Vec<(i32, String, String)> = pages
             .iter()
-            .map(|(s, n, _, h)| (*s, n.clone(), h.clone()))
+            .map(|(s, n, _, h, _)| (*s, n.clone(), h.clone()))
             .collect();
 
-        // Look up existing hashes for this backend
         let mut stmt = conn.prepare(
             "SELECT section, name, content_hash FROM pages WHERE backend = ?1",
         )?;
@@ -147,13 +231,11 @@ pub fn index_backend(backend: &BackendDef) -> anyhow::Result<()> {
             .filter_map(|r| r.ok())
             .collect();
 
-        // Build lookup: (section, name) -> hash for existing entries
         let existing_map: std::collections::HashMap<(i32, String), String> = existing
             .iter()
             .map(|(s, n, h)| ((*s, n.clone()), h.clone()))
             .collect();
 
-        // Build lookup for fs_pages: (section, name) -> hash
         let fs_map: std::collections::HashMap<(i32, String), String> = fs_pages
             .iter()
             .map(|(s, n, h)| ((*s, n.clone()), h.clone()))
@@ -163,18 +245,33 @@ pub fn index_backend(backend: &BackendDef) -> anyhow::Result<()> {
         let mut updated = 0;
         let mut deleted = 0;
 
-        // Insert new or update changed pages
-        for (section, name, path, hash) in &pages {
+        for (section, name, path, hash, description) in &pages {
             let key = (*section, name.clone());
             match existing_map.get(&key) {
                 Some(existing_hash) if existing_hash == hash => {
-                    // Unchanged — skip
+                    // Unchanged — but description might have been added in v2 migration
+                    // Check if description needs updating
+                    let needs_desc_update: bool = conn
+                        .query_row(
+                            "SELECT length(description) = 0 FROM pages WHERE backend = ?1 AND section = ?2 AND name = ?3",
+                            rusqlite::params![backend.name, section, name],
+                            |row| row.get(0),
+                        )
+                        .unwrap_or(true);
+
+                    if needs_desc_update {
+                        conn.execute(
+                            "UPDATE pages SET description = ?1, last_updated = ?2 WHERE backend = ?3 AND section = ?4 AND name = ?5",
+                            rusqlite::params![description, now, backend.name, section, name],
+                        )?;
+                        updated += 1;
+                    }
                 }
                 _ => {
                     conn.execute(
-                        "INSERT OR REPLACE INTO pages (backend, section, name, path, format, content_hash, last_updated)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                        rusqlite::params![backend.name, section, name, path, format_str, hash, now],
+                        "INSERT OR REPLACE INTO pages (backend, section, name, path, format, content_hash, description, last_updated)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                        rusqlite::params![backend.name, section, name, path, format_str, hash, description, now],
                     )?;
                     if existing_map.contains_key(&key) {
                         updated += 1;
@@ -185,7 +282,6 @@ pub fn index_backend(backend: &BackendDef) -> anyhow::Result<()> {
             }
         }
 
-        // Delete pages that no longer exist on disk
         for (section, name, _) in &existing {
             let key = (*section, name.clone());
             if !fs_map.contains_key(&key) {
@@ -197,7 +293,6 @@ pub fn index_backend(backend: &BackendDef) -> anyhow::Result<()> {
             }
         }
 
-        // Rebuild FTS only if there were changes
         if inserted > 0 || updated > 0 || deleted > 0 {
             conn.execute(
                 "INSERT INTO pages_fts(pages_fts) VALUES('rebuild')",
@@ -226,7 +321,7 @@ pub fn remove_backend_entries(backend_name: &str) -> anyhow::Result<()> {
     })
 }
 
-pub fn search(topic: &str) -> anyhow::Result<Vec<(String, i32, String)>> {
+pub fn search_by_name(topic: &str) -> anyhow::Result<Vec<(String, i32, String)>> {
     with_conn(|conn| {
         let mut stmt = conn.prepare(
             "SELECT backend, section, name FROM pages WHERE name LIKE ?1 ORDER BY name",
@@ -244,11 +339,48 @@ pub fn search(topic: &str) -> anyhow::Result<Vec<(String, i32, String)>> {
     })
 }
 
+pub fn search_by_keyword(keyword: &str) -> anyhow::Result<Vec<(String, i32, String, String)>> {
+    with_conn(|conn| {
+        let mut stmt = conn.prepare(
+            "SELECT p.backend, p.section, p.name, p.description
+             FROM pages p
+             JOIN pages_fts f ON f.rowid = p.id
+             WHERE pages_fts MATCH ?1
+             ORDER BY rank",
+        )?;
+
+        let pattern = keyword.to_string();
+        let results: Vec<(String, i32, String, String)> = stmt
+            .query_map(rusqlite::params![pattern], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(results)
+    })
+}
+
+pub fn find_page(backend: &str, topic: &str) -> anyhow::Result<Option<(i32, String)>> {
+    with_conn(|conn| {
+        let mut stmt = conn.prepare(
+            "SELECT section, name FROM pages WHERE backend = ?1 AND name = ?2 ORDER BY section ASC",
+        )?;
+
+        let results: Vec<(i32, String)> = stmt
+            .query_map(rusqlite::params![backend, topic], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(results.into_iter().next())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // --- parse_section_and_name ---
 
     #[test]
     fn parse_simple_man_page_name() {
@@ -321,6 +453,55 @@ mod tests {
             parse_section_and_name("__libc_start_main.3"),
             Some((3, "__libc_start_main".to_string()))
         );
+    }
+
+    // --- extract_description ---
+
+    #[test]
+    fn extract_description_basic() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("execve.2");
+        std::fs::write(&file, ".TH EXECVE 2\n.SH NAME\nexecve \\- execute program\n.SH SYNOPSIS\n").unwrap();
+        let desc = extract_description(&file);
+        assert_eq!(desc, "execute program");
+    }
+
+    #[test]
+    fn extract_description_strips_roff() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("open.2");
+        std::fs::write(&file, ".SH NAME\n\\fBopen\\fP, \\fBopenat\\fP \\- open and possibly create a file\n.SH SYNOPSIS\n").unwrap();
+        let desc = extract_description(&file);
+        assert!(desc.contains("open and possibly create a file"));
+        assert!(!desc.contains("\\fB"));
+        assert!(!desc.contains("open, openat"));
+    }
+
+    #[test]
+    fn extract_description_multiline() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("printf.3");
+        std::fs::write(&file, ".SH NAME\nprintf, fprintf, sprintf \\- formatted output conversion\n").unwrap();
+        let desc = extract_description(&file);
+        assert!(desc.contains("formatted output conversion"));
+    }
+
+    #[test]
+    fn extract_description_no_name_section() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("unknown.1");
+        std::fs::write(&file, ".SH SYNOPSIS\nSome stuff\n").unwrap();
+        let desc = extract_description(&file);
+        assert!(desc.is_empty());
+    }
+
+    #[test]
+    fn extract_description_dash_handled() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("ls.1");
+        std::fs::write(&file, ".SH NAME\nls \\- list directory contents\n").unwrap();
+        let desc = extract_description(&file);
+        assert_eq!(desc, "list directory contents");
     }
 
     // --- civil_from_days ---
@@ -418,7 +599,7 @@ mod tests {
         let pages = collect_man_pages(dir.path());
         assert_eq!(pages.len(), 2);
 
-        let names: Vec<&str> = pages.iter().map(|(_, n, _, _)| n.as_str()).collect();
+        let names: Vec<&str> = pages.iter().map(|(_, n, _, _, _)| n.as_str()).collect();
         assert!(names.contains(&"execve"));
         assert!(names.contains(&"printf"));
     }
@@ -458,12 +639,27 @@ mod tests {
         assert_eq!(pages[0].0, 2);
     }
 
+    #[test]
+    fn collect_extracts_description() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("execve.2"),
+            ".SH NAME\nexecve \\- execute program\n",
+        )
+        .unwrap();
+
+        let pages = collect_man_pages(dir.path());
+        assert_eq!(pages.len(), 1);
+        assert_eq!(pages[0].4, "execute program");
+    }
+
     // --- Database operations with test DB ---
 
     fn create_test_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
         conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch(SCHEMA_V2_FTS).unwrap();
         conn
     }
 
@@ -495,10 +691,10 @@ mod tests {
         let conn = create_test_db();
 
         conn.execute(
-            "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, description, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![
-                "test-backend", 2, "execve", "/path/to/execve.2", "roff", "abc123", "2024-01-01T00:00:00Z"
+                "test-backend", 2, "execve", "/path/to/execve.2", "roff", "abc123", "execute program", "2024-01-01T00:00:00Z"
             ],
         ).unwrap();
 
@@ -506,6 +702,56 @@ mod tests {
             .query_row("SELECT name FROM pages WHERE backend = 'test-backend'", [], |row| row.get(0))
             .unwrap();
         assert_eq!(name, "execve");
+
+        let desc: String = conn
+            .query_row("SELECT description FROM pages WHERE backend = 'test-backend'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(desc, "execute program");
+    }
+
+    #[test]
+    fn db_fts_keyword_search() {
+        let conn = create_test_db();
+
+        conn.execute(
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, description, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params!["test", 2, "execve", "/execve.2", "roff", "h", "execute a program", "2024-01-01T00:00:00Z"],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, description, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params!["test", 2, "open", "/open.2", "roff", "h", "open and possibly create a file", "2024-01-01T00:00:00Z"],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, description, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params!["test", 3, "printf", "/printf.3", "roff", "h", "formatted output conversion", "2024-01-01T00:00:00Z"],
+        ).unwrap();
+
+        conn.execute("INSERT INTO pages_fts(pages_fts) VALUES('rebuild')", []).unwrap();
+
+        // Search for "execute" should find execve
+        let mut stmt = conn.prepare(
+            "SELECT p.name FROM pages p JOIN pages_fts f ON f.rowid = p.id WHERE pages_fts MATCH ?1 ORDER BY rank",
+        ).unwrap();
+        let results: Vec<String> = stmt
+            .query_map(rusqlite::params!["execute"], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert_eq!(results, vec!["execve"]);
+
+        // Search for "file" should find open (in description) and printf (no, "file" not in printf's desc)
+        let mut stmt = conn.prepare(
+            "SELECT p.name FROM pages p JOIN pages_fts f ON f.rowid = p.id WHERE pages_fts MATCH ?1 ORDER BY rank",
+        ).unwrap();
+        let results: Vec<String> = stmt
+            .query_map(rusqlite::params!["file"], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(results.contains(&"open".to_string()));
     }
 
     #[test]
@@ -513,18 +759,18 @@ mod tests {
         let conn = create_test_db();
 
         conn.execute(
-            "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, description, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![
-                "test", 2, "dup", "/p", "roff", "h1", "2024-01-01T00:00:00Z"
+                "test", 2, "dup", "/p", "roff", "h1", "", "2024-01-01T00:00:00Z"
             ],
         ).unwrap();
 
         conn.execute(
-            "INSERT OR REPLACE INTO pages (backend, section, name, path, format, content_hash, last_updated)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT OR REPLACE INTO pages (backend, section, name, path, format, content_hash, description, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![
-                "test", 2, "dup", "/p2", "roff", "h2", "2024-01-02T00:00:00Z"
+                "test", 2, "dup", "/p2", "roff", "h2", "updated desc", "2024-01-02T00:00:00Z"
             ],
         ).unwrap();
 
@@ -534,9 +780,9 @@ mod tests {
         assert_eq!(count, 1);
 
         let path: String = conn
-            .query_row("SELECT path FROM pages WHERE backend = 'test'", [], |row| row.get(0))
+            .query_row("SELECT description FROM pages WHERE backend = 'test'", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(path, "/p2");
+        assert_eq!(path, "updated desc");
     }
 
     #[test]
@@ -544,14 +790,14 @@ mod tests {
         let conn = create_test_db();
 
         conn.execute(
-            "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params!["backend-a", 2, "foo", "/a", "roff", "h", "2024-01-01T00:00:00Z"],
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, description, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params!["backend-a", 2, "foo", "/a", "roff", "h", "desc a", "2024-01-01T00:00:00Z"],
         ).unwrap();
         conn.execute(
-            "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params!["backend-b", 3, "bar", "/b", "roff", "h", "2024-01-01T00:00:00Z"],
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, description, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params!["backend-b", 3, "bar", "/b", "roff", "h", "desc b", "2024-01-01T00:00:00Z"],
         ).unwrap();
 
         conn.execute("DELETE FROM pages WHERE backend = 'backend-a'", []).unwrap();
@@ -573,10 +819,10 @@ mod tests {
 
         for (name, section) in [("execve", 2), ("execveat", 2), ("fexecve", 3), ("open", 2)] {
             conn.execute(
-                "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO pages (backend, section, name, path, format, content_hash, description, last_updated)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 rusqlite::params![
-                    "test", section, name, format!("/{}", name), "roff", "h", "2024-01-01T00:00:00Z"
+                    "test", section, name, format!("/{}", name), "roff", "h", "", "2024-01-01T00:00:00Z"
                 ],
             ).unwrap();
         }
@@ -591,35 +837,6 @@ mod tests {
             .collect();
 
         assert_eq!(results, vec!["execve", "execveat", "fexecve"]);
-    }
-
-    #[test]
-    fn db_content_hash_comparison_skips_unchanged() {
-        let conn = create_test_db();
-
-        // Insert a page with hash "h1"
-        conn.execute(
-            "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params!["test", 2, "open", "/man2/open.2", "roff", "h1", "2024-01-01T00:00:00Z"],
-        ).unwrap();
-
-        // INSERT OR REPLACE with same hash — row count should still be 1
-        let changes = conn.execute(
-            "INSERT OR REPLACE INTO pages (backend, section, name, path, format, content_hash, last_updated)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params!["test", 2, "open", "/man2/open.2", "roff", "h1", "2024-01-02T00:00:00Z"],
-        ).unwrap();
-        // Even though hash is same, INSERT OR REPLACE still updates the row
-        // (it replaces the whole row). The optimization is at the application level:
-        // don't issue the SQL if hash hasn't changed.
-        assert_eq!(changes, 1);
-
-        // Verify count is still 1
-        let count: i64 = conn
-            .query_row("SELECT count(*) FROM pages WHERE backend = 'test'", [], |row| row.get(0))
-            .unwrap();
-        assert_eq!(count, 1);
     }
 
     // --- iso_now format ---

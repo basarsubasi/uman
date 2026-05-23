@@ -73,7 +73,7 @@ The config file is created automatically on first run with default backends. You
 | `name` | Identifier used in commands |
 | `source` | URL to clone (`git`) or download (`curl`) |
 | `format` | Man page format (`roff`) |
-| `fetching` | Download method: `git` or `curl` |
+| `fetching` | Download method: `git (reccommended)` or `curl` |
 
 ### Storage layout
 
@@ -94,13 +94,15 @@ The config file is created automatically on first run with default backends. You
 ### Reading man pages
 
 ```bash
-uman <backend> <section> <topic>
+uman <backend> [<section>] <topic>
 ```
 
 ```bash
 uman linux-upstream 2 execve
-uman linux-upstream 3 printf
+uman linux-upstream execve
 ```
+
+When section is omitted, `uman` resolves it automatically by looking up the lowest section number in the index.
 
 ### Installing backends
 
@@ -151,7 +153,8 @@ For git backends, this runs `git pull` and re-indexes changed pages. For curl ba
 ### Searching
 
 ```bash
-uman search <topic>
+uman search <topic>         # filename search (default)
+uman search -k <keyword>    # keyword search (name + description)
 ```
 
 ```bash
@@ -165,6 +168,18 @@ BACKEND              SECTION    NAME
 linux-upstream       2          execve
 linux-upstream       2          execveat
 linux-upstream       3          fexecve
+```
+
+```bash
+uman search -k execute
+```
+
+Output:
+
+```
+BACKEND              SECTION    NAME                             DESCRIPTION
+linux-upstream       2          execve                           execute program
+linux-upstream       2          execveat                         execute program relative to directory
 ```
 
 ## Architecture
@@ -186,9 +201,9 @@ search          → query SQLite FTS5
 
 | Command | Description |
 |---------|-------------|
-| `uman <backend> <section> <topic>` | Read a man page |
+| `uman <backend> [<section>] <topic>` | Read a man page |
 | `uman install <backend>` | Install a backend |
 | `uman remove <backend>` | Remove a backend |
 | `uman update [<backend>]` | Update one or all backends |
-| `uman search <topic>` | Search for man pages |
+| `uman search [-k] <topic>` | Search for man pages |
 | `uman backend list` | List configured backends |

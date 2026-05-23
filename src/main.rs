@@ -19,8 +19,12 @@ fn main() -> anyhow::Result<()> {
             cli::Commands::Update { backend } => {
                 backend::update(backend.as_deref())?;
             }
-            cli::Commands::Search { topic } => {
-                search::run(&topic)?;
+            cli::Commands::Search { keyword, topic } => {
+                if keyword {
+                    search::run_keyword(&topic)?;
+                } else {
+                    search::run_filename(&topic)?;
+                }
             }
             cli::Commands::Backend { action } => match action {
                 cli::BackendAction::List => {
@@ -28,16 +32,30 @@ fn main() -> anyhow::Result<()> {
                 }
             },
         }
-    } else if let (Some(backend), Some(section), Some(topic)) =
-        (cli.backend, cli.section, cli.topic)
-    {
-        render::read(&backend, &section, &topic)?;
+    } else if let Some(backend) = cli.backend {
+        match (cli.section, cli.topic) {
+            (Some(section), Some(topic)) => {
+                render::read(&backend, Some(&section), &topic)?;
+            }
+            (Some(topic), None) => {
+                render::read(&backend, None, &topic)?;
+            }
+            (None, None) => {
+                println!("usage: uman <backend> [<section>] <topic>");
+                println!("       uman install <backend>");
+                println!("       uman remove <backend>");
+                println!("       uman update [<backend>]");
+                println!("       uman search [-k] <topic>");
+                println!("       uman backend list");
+            }
+            (None, Some(_)) => unreachable!(),
+        }
     } else {
-        println!("usage: uman <backend> <section> <topic>");
+        println!("usage: uman <backend> [<section>] <topic>");
         println!("       uman install <backend>");
         println!("       uman remove <backend>");
         println!("       uman update [<backend>]");
-        println!("       uman search <topic>");
+        println!("       uman search [-k] <topic>");
         println!("       uman backend list");
     }
 

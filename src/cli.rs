@@ -23,6 +23,8 @@ pub enum Commands {
         backend: Option<String>,
     },
     Search {
+        #[arg(short, long)]
+        keyword: bool,
         topic: String,
     },
     Backend {

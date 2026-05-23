@@ -50,7 +50,22 @@ fn parse_update_single() {
 fn parse_search() {
     let cli = uman::cli::Cli::try_parse_from(["uman", "search", "execve"]).unwrap();
     match cli.command {
-        Some(Commands::Search { topic }) => assert_eq!(topic, "execve"),
+        Some(Commands::Search { keyword, topic }) => {
+            assert!(!keyword);
+            assert_eq!(topic, "execve");
+        }
+        other => panic!("expected Search, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_search_with_keyword_flag() {
+    let cli = uman::cli::Cli::try_parse_from(["uman", "search", "-k", "execute"]).unwrap();
+    match cli.command {
+        Some(Commands::Search { keyword, topic }) => {
+            assert!(keyword);
+            assert_eq!(topic, "execute");
+        }
         other => panic!("expected Search, got {:?}", other),
     }
 }
