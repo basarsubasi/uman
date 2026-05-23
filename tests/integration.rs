@@ -73,7 +73,7 @@ fn config_custom_backend_deserialization() {
     let config: uman::config::Config = serde_json::from_value(json_data).unwrap();
     let def = config.backends.get("my-custom").unwrap();
     assert_eq!(def.source, "https://example.com/repo");
-    assert_eq!(def.fetching, "curl");
+    assert_eq!(def.fetching, uman::config::FetchMethod::Curl);
 }
 
 #[test]
@@ -319,8 +319,8 @@ fn error_messages_are_human_readable() {
         "no man page renderer found (install man-db or mandoc)"
     );
     assert_eq!(
-        uman::error::UmanError::CommandFailed("git clone failed".to_string()).to_string(),
-        "command failed: git clone failed"
+        uman::error::UmanError::CommandFailed { cmd: "git clone https://example.com".to_string(), stderr: "fatal: not found".to_string() }.to_string(),
+        "command 'git clone https://example.com' failed: fatal: not found"
     );
 }
 
@@ -368,8 +368,8 @@ fn config_get_backend_returns_correct_definition() {
     let config = uman::config::Config::defaults();
     let be = config.get_backend("linux-upstream").unwrap();
     assert_eq!(be.name, "linux-upstream");
-    assert_eq!(be.format, "roff");
-    assert_eq!(be.fetching, "git");
+    assert_eq!(be.format, uman::config::ManFormat::Roff);
+    assert_eq!(be.fetching, uman::config::FetchMethod::Git);
 }
 
 #[test]

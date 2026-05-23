@@ -1,16 +1,103 @@
 use std::collections::BTreeMap;
+use std::fmt;
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::UmanError;
 use crate::paths;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FetchMethod {
+    Git,
+    Curl,
+}
+
+impl FromStr for FetchMethod {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "git" => Ok(FetchMethod::Git),
+            "curl" => Ok(FetchMethod::Curl),
+            other => Err(format!(
+                "unknown fetching method '{}': must be 'git' or 'curl'",
+                other
+            )),
+        }
+    }
+}
+
+impl fmt::Display for FetchMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FetchMethod::Git => write!(f, "git"),
+            FetchMethod::Curl => write!(f, "curl"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ManFormat {
+    Roff,
+}
+
+impl FromStr for ManFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "roff" => Ok(ManFormat::Roff),
+            other => Err(format!(
+                "unknown format '{}': currently only 'roff' is supported",
+                other
+            )),
+        }
+    }
+}
+
+impl fmt::Display for ManFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ManFormat::Roff => write!(f, "roff"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackendDef {
     pub name: String,
     pub source: String,
-    pub format: String,
-    pub fetching: String,
+    #[serde(default = "default_format", deserialize_with = "deserialize_format")]
+    pub format: ManFormat,
+    #[serde(default = "default_fetching", deserialize_with = "deserialize_fetching")]
+    pub fetching: FetchMethod,
+}
+
+fn default_format() -> ManFormat {
+    ManFormat::Roff
+}
+
+fn default_fetching() -> FetchMethod {
+    FetchMethod::Git
+}
+
+fn deserialize_format<'de, D>(deserializer: D) -> Result<ManFormat, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    ManFormat::from_str(&s).map_err(serde::de::Error::custom)
+}
+
+fn deserialize_fetching<'de, D>(deserializer: D) -> Result<FetchMethod, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    FetchMethod::from_str(&s).map_err(serde::de::Error::custom)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -54,8 +141,8 @@ impl Config {
             BackendDef {
                 name: "linux-upstream".to_string(),
                 source: "https://github.com/mkerrisk/man-pages".to_string(),
-                format: "roff".to_string(),
-                fetching: "git".to_string(),
+                format: ManFormat::Roff,
+                fetching: FetchMethod::Git,
             },
         );
         backends.insert(
@@ -63,8 +150,8 @@ impl Config {
             BackendDef {
                 name: "freebsd".to_string(),
                 source: "https://gitlab.freebsd.org/freebsd/doc-manual.git".to_string(),
-                format: "roff".to_string(),
-                fetching: "git".to_string(),
+                format: ManFormat::Roff,
+                fetching: FetchMethod::Git,
             },
         );
         Self { backends }
@@ -89,8 +176,8 @@ mod tests {
         let linux = config.backends.get("linux-upstream").unwrap();
         assert_eq!(linux.name, "linux-upstream");
         assert_eq!(linux.source, "https://github.com/mkerrisk/man-pages");
-        assert_eq!(linux.format, "roff");
-        assert_eq!(linux.fetching, "git");
+        assert_eq!(linux.format, ManFormat::Roff);
+        assert_eq!(linux.fetching, FetchMethod::Git);
     }
 
     #[test]
@@ -126,7 +213,6 @@ mod tests {
     fn config_pretty_json_structure() {
         let config = Config::defaults();
         let json = serde_json::to_string_pretty(&config).unwrap();
-        // Verify it's valid JSON with expected structure
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(parsed["backends"]["linux-upstream"]["source"].is_string());
         assert!(parsed["backends"]["freebsd"]["format"].is_string());
@@ -137,21 +223,78 @@ mod tests {
         let def = BackendDef {
             name: "test-backend".to_string(),
             source: "https://example.com/repo".to_string(),
-            format: "roff".to_string(),
-            fetching: "curl".to_string(),
+            format: ManFormat::Roff,
+            fetching: FetchMethod::Curl,
         };
         let json = serde_json::to_string(&def).unwrap();
         let parsed: BackendDef = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.name, "test-backend");
         assert_eq!(parsed.source, "https://example.com/repo");
-        assert_eq!(parsed.format, "roff");
-        assert_eq!(parsed.fetching, "curl");
+        assert_eq!(parsed.format, ManFormat::Roff);
+        assert_eq!(parsed.fetching, FetchMethod::Curl);
     }
 
     #[test]
     fn backends_are_sorted_in_btreemap() {
         let config = Config::defaults();
         let keys: Vec<&String> = config.backends.keys().collect();
-        assert_eq!(keys, &["freebsd", "linux-upstream"]); // BTreeMap is sorted
+        assert_eq!(keys, &["freebsd", "linux-upstream"]);
+    }
+
+    #[test]
+    fn fetch_method_from_str() {
+        assert_eq!(FetchMethod::from_str("git").unwrap(), FetchMethod::Git);
+        assert_eq!(FetchMethod::from_str("curl").unwrap(), FetchMethod::Curl);
+        assert!(FetchMethod::from_str("svn").is_err());
+        assert!(FetchMethod::from_str("http").is_err());
+    }
+
+    #[test]
+    fn fetch_method_display() {
+        assert_eq!(FetchMethod::Git.to_string(), "git");
+        assert_eq!(FetchMethod::Curl.to_string(), "curl");
+    }
+
+    #[test]
+    fn man_format_from_str() {
+        assert_eq!(ManFormat::from_str("roff").unwrap(), ManFormat::Roff);
+        assert!(ManFormat::from_str("html").is_err());
+    }
+
+    #[test]
+    fn man_format_display() {
+        assert_eq!(ManFormat::Roff.to_string(), "roff");
+    }
+
+    #[test]
+    fn config_rejects_invalid_fetching() {
+        let json = r#"{
+            "backends": {
+                "bad": {
+                    "name": "bad",
+                    "source": "https://example.com",
+                    "format": "roff",
+                    "fetching": "ftp"
+                }
+            }
+        }"#;
+        let result: Result<Config, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn config_rejects_invalid_format() {
+        let json = r#"{
+            "backends": {
+                "bad": {
+                    "name": "bad",
+                    "source": "https://example.com",
+                    "format": "html",
+                    "fetching": "git"
+                }
+            }
+        }"#;
+        let result: Result<Config, _> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 }

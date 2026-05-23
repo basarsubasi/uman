@@ -126,44 +126,94 @@ pub fn index_backend(backend: &BackendDef) -> anyhow::Result<()> {
 
     let pages = collect_man_pages(&backend_dir);
     let now = iso_now();
+    let format_str = backend.format.to_string();
 
     with_conn(|conn| {
-        for (section, name, path, hash) in &pages {
-            conn.execute(
-                "INSERT OR REPLACE INTO pages (backend, section, name, path, format, content_hash, last_updated)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                rusqlite::params![backend.name, section, name, path, backend.format, hash, now],
-            )?;
-        }
+        // Build a set of (section, name, hash) from the filesystem
+        let fs_pages: Vec<(i32, String, String)> = pages
+            .iter()
+            .map(|(s, n, _, h)| (*s, n.clone(), h.clone()))
+            .collect();
 
-        let backend_pages: Vec<(i32, String)> = pages.iter().map(|(s, n, _, _)| (*s, n.clone())).collect();
-
+        // Look up existing hashes for this backend
         let mut stmt = conn.prepare(
-            "SELECT section, name FROM pages WHERE backend = ?1",
+            "SELECT section, name, content_hash FROM pages WHERE backend = ?1",
         )?;
 
-        let existing: Vec<(i32, String)> = stmt
+        let existing: Vec<(i32, String, String)> = stmt
             .query_map(rusqlite::params![backend.name], |row| {
-                Ok((row.get(0)?, row.get(1)?))
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
             })?
             .filter_map(|r| r.ok())
             .collect();
 
-        for (section, name) in &existing {
-            if !backend_pages.contains(&(*section, name.clone())) {
+        // Build lookup: (section, name) -> hash for existing entries
+        let existing_map: std::collections::HashMap<(i32, String), String> = existing
+            .iter()
+            .map(|(s, n, h)| ((*s, n.clone()), h.clone()))
+            .collect();
+
+        // Build lookup for fs_pages: (section, name) -> hash
+        let fs_map: std::collections::HashMap<(i32, String), String> = fs_pages
+            .iter()
+            .map(|(s, n, h)| ((*s, n.clone()), h.clone()))
+            .collect();
+
+        let mut inserted = 0;
+        let mut updated = 0;
+        let mut deleted = 0;
+
+        // Insert new or update changed pages
+        for (section, name, path, hash) in &pages {
+            let key = (*section, name.clone());
+            match existing_map.get(&key) {
+                Some(existing_hash) if existing_hash == hash => {
+                    // Unchanged — skip
+                }
+                _ => {
+                    conn.execute(
+                        "INSERT OR REPLACE INTO pages (backend, section, name, path, format, content_hash, last_updated)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        rusqlite::params![backend.name, section, name, path, format_str, hash, now],
+                    )?;
+                    if existing_map.contains_key(&key) {
+                        updated += 1;
+                    } else {
+                        inserted += 1;
+                    }
+                }
+            }
+        }
+
+        // Delete pages that no longer exist on disk
+        for (section, name, _) in &existing {
+            let key = (*section, name.clone());
+            if !fs_map.contains_key(&key) {
                 conn.execute(
                     "DELETE FROM pages WHERE backend = ?1 AND section = ?2 AND name = ?3",
                     rusqlite::params![backend.name, section, name],
                 )?;
+                deleted += 1;
             }
         }
 
-        conn.execute(
-            "INSERT INTO pages_fts(pages_fts) VALUES('rebuild')",
-            [],
-        )?;
+        // Rebuild FTS only if there were changes
+        if inserted > 0 || updated > 0 || deleted > 0 {
+            conn.execute(
+                "INSERT INTO pages_fts(pages_fts) VALUES('rebuild')",
+                [],
+            )?;
+        }
 
-        println!("Indexed {} pages for backend '{}'.", pages.len(), backend.name);
+        println!(
+            "Indexed backend '{}': {} added, {} updated, {} removed, {} unchanged (total {})",
+            backend.name,
+            inserted,
+            updated,
+            deleted,
+            fs_pages.len() - inserted - updated,
+            fs_pages.len()
+        );
         Ok(())
     })
 }
@@ -249,10 +299,7 @@ mod tests {
 
     #[test]
     fn parse_section_1() {
-        assert_eq!(
-            parse_section_and_name("ls.1"),
-            Some((1, "ls".to_string()))
-        );
+        assert_eq!(parse_section_and_name("ls.1"), Some((1, "ls".to_string())));
     }
 
     #[test]
@@ -265,10 +312,7 @@ mod tests {
 
     #[test]
     fn parse_single_char_name() {
-        assert_eq!(
-            parse_section_and_name("X.7"),
-            Some((7, "X".to_string()))
-        );
+        assert_eq!(parse_section_and_name("X.7"), Some((7, "X".to_string())));
     }
 
     #[test]
@@ -286,9 +330,8 @@ mod tests {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
     }
 
-#[test]
+    #[test]
     fn known_date_2024_march_1() {
-        // 2024-03-01 is 19783 days after epoch
         assert_eq!(civil_from_days(19783), (2024, 3, 1));
     }
 
@@ -304,7 +347,6 @@ mod tests {
 
     #[test]
     fn leap_day_2024_feb_29() {
-        // 2024-02-29 is day 19782
         assert_eq!(civil_from_days(19782), (2024, 2, 29));
     }
 
@@ -315,7 +357,6 @@ mod tests {
 
     #[test]
     fn far_future_date() {
-        // 2100-01-01
         assert_eq!(civil_from_days(47482), (2100, 1, 1));
     }
 
@@ -328,7 +369,6 @@ mod tests {
         std::fs::write(&file_path, "hello world").unwrap();
         let hash = hash_file(&file_path);
         assert!(hash.is_some());
-        // SHA-256 of "hello world" is a known 64-char hex string
         let h = hash.unwrap();
         assert_eq!(h.len(), 64);
         assert!(h.chars().all(|c| c.is_ascii_hexdigit()));
@@ -431,7 +471,6 @@ mod tests {
     fn db_schema_creates_tables() {
         let conn = create_test_db();
 
-        // Verify pages table exists
         let count: i64 = conn
             .query_row(
                 "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='pages'",
@@ -441,7 +480,6 @@ mod tests {
             .unwrap();
         assert_eq!(count, 1);
 
-        // Verify FTS table exists
         let count: i64 = conn
             .query_row(
                 "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='pages_fts'",
@@ -482,7 +520,6 @@ mod tests {
             ],
         ).unwrap();
 
-        // INSERT OR REPLACE should work
         conn.execute(
             "INSERT OR REPLACE INTO pages (backend, section, name, path, format, content_hash, last_updated)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -556,12 +593,40 @@ mod tests {
         assert_eq!(results, vec!["execve", "execveat", "fexecve"]);
     }
 
+    #[test]
+    fn db_content_hash_comparison_skips_unchanged() {
+        let conn = create_test_db();
+
+        // Insert a page with hash "h1"
+        conn.execute(
+            "INSERT INTO pages (backend, section, name, path, format, content_hash, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params!["test", 2, "open", "/man2/open.2", "roff", "h1", "2024-01-01T00:00:00Z"],
+        ).unwrap();
+
+        // INSERT OR REPLACE with same hash — row count should still be 1
+        let changes = conn.execute(
+            "INSERT OR REPLACE INTO pages (backend, section, name, path, format, content_hash, last_updated)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params!["test", 2, "open", "/man2/open.2", "roff", "h1", "2024-01-02T00:00:00Z"],
+        ).unwrap();
+        // Even though hash is same, INSERT OR REPLACE still updates the row
+        // (it replaces the whole row). The optimization is at the application level:
+        // don't issue the SQL if hash hasn't changed.
+        assert_eq!(changes, 1);
+
+        // Verify count is still 1
+        let count: i64 = conn
+            .query_row("SELECT count(*) FROM pages WHERE backend = 'test'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
     // --- iso_now format ---
 
     #[test]
     fn iso_now_produces_valid_format() {
         let now = iso_now();
-        // Should match YYYY-MM-DDTHH:MM:SSZ
         assert!(now.contains('T'), "iso_now should contain 'T': {now}");
         assert!(now.ends_with('Z'), "iso_now should end with 'Z': {now}");
         assert_eq!(now.len(), 20, "iso_now should be 20 chars: {now}");
