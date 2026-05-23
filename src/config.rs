@@ -176,28 +176,66 @@ impl Config {
     pub fn defaults() -> Self {
         let mut backends = BTreeMap::new();
         backends.insert(
-            "linux-upstream".to_string(),
+            "netbsd".to_string(),
             BackendDef {
-                name: "linux-upstream".to_string(),
-                source: "https://github.com/mkerrisk/man-pages".to_string(),
+                name: "netbsd".to_string(),
+                source: "https://github.com/basarsubasi/netbsd-man.git".to_string(),
                 format: ManFormat::Roff,
                 fetching: FetchMethod::Git,
-                aliases: vec!["linux".to_string()],
+                aliases: vec!["netbsd".to_string()],
+            },
+        );
+        backends.insert(
+            "openbsd".to_string(),
+            BackendDef {
+                name: "openbsd".to_string(),
+                source: "https://github.com/basarsubasi/openbsd-man.git".to_string(),
+                format: ManFormat::Roff,
+                fetching: FetchMethod::Git,
+                aliases: vec!["openbsd".to_string()],
             },
         );
         backends.insert(
             "freebsd".to_string(),
             BackendDef {
                 name: "freebsd".to_string(),
-                source: "https://gitlab.freebsd.org/freebsd/doc-manual.git".to_string(),
+                source: "https://github.com/basarsubasi/freebsd-man.git".to_string(),
                 format: ManFormat::Roff,
                 fetching: FetchMethod::Git,
-                aliases: vec!["bsd".to_string()],
+                aliases: vec!["freebsd".to_string(), "bsd".to_string()],
             },
         );
+        backends.insert(
+            "macos".to_string(),
+            BackendDef {
+                name: "macos".to_string(),
+                source: "https://github.com/basarsubasi/apple-man.git".to_string(),
+                format: ManFormat::Roff,
+                fetching: FetchMethod::Git,
+                aliases: vec!["macos".to_string(), "darwin".to_string(), "apple".to_string()],
+            },
+        );
+        backends.insert(
+            "linux-upstream".to_string(),
+            BackendDef {
+                name: "linux-upstream".to_string(),
+                source: "https://git.kernel.org/pub/scm/docs/man-pages/man-pages.git".to_string(),
+                format: ManFormat::Roff,
+                fetching: FetchMethod::Git,
+                aliases: vec!["linux".to_string(), "goat".to_string()],
+            },
+        );
+        let default_backend_name = match std::env::consts::OS {
+            "macos" => "macos",
+            "freebsd" => "freebsd",
+            "netbsd" => "netbsd",
+            "openbsd" => "openbsd",
+            _ => "linux-upstream", // fallback to linux for "linux" and others
+        };
+
         Self {
             backends,
-            default_backend: None,
+            default_backend: Some(default_backend_name.to_string()),
         }
     }
 }
@@ -211,7 +249,10 @@ mod tests {
         let config = Config::defaults();
         assert!(config.backends.contains_key("linux-upstream"));
         assert!(config.backends.contains_key("freebsd"));
-        assert_eq!(config.backends.len(), 2);
+        assert!(config.backends.contains_key("netbsd"));
+        assert!(config.backends.contains_key("openbsd"));
+        assert!(config.backends.contains_key("apple"));
+        assert_eq!(config.backends.len(), 5);
     }
 
     #[test]
@@ -219,16 +260,16 @@ mod tests {
         let config = Config::defaults();
         let linux = config.backends.get("linux-upstream").unwrap();
         assert_eq!(linux.name, "linux-upstream");
-        assert_eq!(linux.source, "https://github.com/mkerrisk/man-pages");
+        assert_eq!(linux.source, "https://git.kernel.org/pub/scm/docs/man-pages/man-pages.git");
         assert_eq!(linux.format, ManFormat::Roff);
         assert_eq!(linux.fetching, FetchMethod::Git);
         assert!(linux.aliases.contains(&"linux".to_string()));
     }
 
     #[test]
-    fn defaults_has_no_default_backend() {
+    fn defaults_has_default_backend() {
         let config = Config::defaults();
-        assert!(config.default_backend.is_none());
+        assert_eq!(config.default_backend.as_deref(), Some("linux-upstream"));
     }
 
     #[test]
@@ -265,9 +306,9 @@ mod tests {
     }
 
     #[test]
-    fn resolve_by_alias_bsd() {
+    fn resolve_by_alias_freebsd() {
         let config = Config::defaults();
-        let def = config.resolve("bsd").unwrap();
+        let def = config.resolve("freebsd").unwrap();
         assert_eq!(def.name, "freebsd");
     }
 
@@ -284,7 +325,8 @@ mod tests {
 
     #[test]
     fn get_default_backend_none_set() {
-        let config = Config::defaults();
+        let mut config = Config::defaults();
+        config.default_backend = None;
         let result = config.get_default_backend();
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -296,11 +338,18 @@ mod tests {
     #[test]
     fn get_default_backend_set_but_not_installed() {
         let mut config = Config::defaults();
-        config.default_backend = Some("freebsd".to_string());
+        config.backends.insert("not-installed-test".to_string(), BackendDef {
+            name: "not-installed-test".to_string(),
+            source: "".to_string(),
+            format: ManFormat::Roff,
+            fetching: FetchMethod::Git,
+            aliases: vec![],
+        });
+        config.default_backend = Some("not-installed-test".to_string());
         let result = config.get_default_backend();
         assert!(result.is_err());
         match result.unwrap_err() {
-            UnimanError::DefaultNotInstalled(name) => assert_eq!(name, "freebsd"),
+            UnimanError::DefaultNotInstalled(name) => assert_eq!(name, "not-installed-test"),
             other => panic!("expected DefaultNotInstalled, got {:?}", other),
         }
     }
@@ -342,7 +391,8 @@ mod tests {
 
     #[test]
     fn config_serialization_roundtrip() {
-        let config = Config::defaults();
+        let mut config = Config::defaults();
+        config.default_backend = None;
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: Config = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.backends.len(), config.backends.len());
@@ -403,7 +453,7 @@ mod tests {
     fn backends_are_sorted_in_btreemap() {
         let config = Config::defaults();
         let keys: Vec<&String> = config.backends.keys().collect();
-        assert_eq!(keys, &["freebsd", "linux-upstream"]);
+        assert_eq!(keys, &["apple", "freebsd", "linux-upstream", "netbsd", "openbsd"]);
     }
 
     #[test]
