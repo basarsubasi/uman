@@ -42,7 +42,7 @@ The config file is created automatically on first run with default backends. You
 {
   "backends": {
     "linux-upstream": {
-      "name": "linux-upstream",
+      "name": "linux",
       "source": "https://github.com/mkerrisk/man-pages",
       "format": "roff",
       "fetching": "git",
@@ -52,7 +52,7 @@ The config file is created automatically on first run with default backends. You
       "name": "freebsd",
       "source": "https://gitlab.freebsd.org/freebsd/doc-manual.git",
       "format": "roff",
-      "fetching": "git",
+      "fetching": "curl",
       "aliases": ["bsd"]
     }
   },
