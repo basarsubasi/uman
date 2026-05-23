@@ -4,8 +4,8 @@
 
 ```bash
 uniman list
-uniman install linux-upstream
-uniman linux execve
+uniman install freebsd (or linux, or macos etc.)
+uniman freebsd execve
 ```
 
 ## Dependencies
