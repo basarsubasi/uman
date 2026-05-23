@@ -228,4 +228,3 @@ Add to `~/.zshrc`:
 eval "$(uman completion zsh)"
 ```
 
-Then reload your shell: `exec $SHELL` or open a new terminal.
