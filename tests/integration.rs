@@ -155,7 +155,7 @@ fn backend_remove_nonexistent_errors() {
 
 #[test]
 fn install_rejects_invalid_backend_name() {
-    let result = uniman::backend::install("../../etc");
+    let result = uniman::backend::install(Some("../../etc"));
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(err_msg.contains("invalid backend name"));
@@ -441,7 +441,8 @@ fn config_resolve_errors_on_unknown() {
 
 #[test]
 fn config_no_default_backend_errors() {
-    let config = uniman::config::Config::defaults();
+    let mut config = uniman::config::Config::defaults();
+    config.default_backend = None;
     let result = config.get_default_backend();
     assert!(result.is_err());
     match result.unwrap_err() {
@@ -473,10 +474,8 @@ fn config_default_backend_not_installed_errors() {
 #[test]
 fn config_default_backend_via_alias_not_installed_errors() {
     let mut config = uniman::config::Config::defaults();
-    config.default_backend = Some("bsd".to_string());
+    config.default_backend = Some("freebsd".to_string());
     let result = config.get_default_backend();
-    // "bsd" resolves to "freebsd" which is likely not installed
-    // If it IS installed (unlikely), skip this test gracefully
     match result {
         Err(uniman::error::UnimanError::DefaultNotInstalled(_)) => {},
         Err(uniman::error::UnimanError::DefaultNotFoundInConfig(_)) => {},

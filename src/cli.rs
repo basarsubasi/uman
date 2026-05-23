@@ -50,8 +50,8 @@ pub enum Commands {
     #[command(about = "Install a backend", long_about = "Download and index a man page backend.\n\
                  The backend name must match an entry in the config (or an alias).")]
     Install {
-        #[arg(help = "Name or alias of the backend to install", value_hint = ValueHint::Other)]
-        backend: String,
+        #[arg(help = "Backend to install (if omitted, installs all configured backends)", value_hint = ValueHint::Other)]
+        backend: Option<String>,
     },
     #[command(about = "Remove a backend", long_about = "Remove an installed backend and delete its data and index entries.")]
     Remove {
@@ -64,11 +64,12 @@ pub enum Commands {
         backend: Option<String>,
     },
     #[command(about = "Search for man pages", long_about = "Search installed backends for man pages.\n\n\
-                 By default searches page names. Use -k to search page names and descriptions.")]
+                 By default searches page names. Use -k to search page names and descriptions.\n\
+                 If no search term is provided, lists all man pages interactively.")]
     Search {
         #[arg(short, long, help = "Search by keyword (name + description) instead of filename")]
         keyword: bool,
-        #[arg(help = "Search term", value_hint = ValueHint::Other)]
-        topic: String,
+        #[arg(help = "Search term (if omitted, lists all pages)", value_hint = ValueHint::Other)]
+        topic: Option<String>,
     },
 }

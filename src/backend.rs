@@ -59,10 +59,59 @@ fn run_command(cmd: &str, args: &[&str], error_context: &str) -> anyhow::Result<
     Ok(())
 }
 
-pub fn install(name: &str) -> anyhow::Result<()> {
+pub fn install(name: Option<&str>) -> anyhow::Result<()> {
+    let config = Config::load()?;
+
+    if let Some(n) = name {
+        install_single(&config, n)?;
+        
+        let mut config = Config::load()?;
+        if config.default_backend.is_none() {
+            let backend_name = config.resolve(n)?.name.clone();
+            config.default_backend = Some(backend_name.clone());
+            config.save()?;
+            println!("Default backend set to '{}'.", backend_name);
+        }
+    } else {
+        let mut any_installed = false;
+        let mut any = false;
+
+        for (backend_name, _) in &config.backends {
+            any = true;
+            match install_single(&config, backend_name) {
+                Ok(()) => {
+                    any_installed = true;
+                }
+                Err(e) => {
+                    if e.to_string().contains("already installed") {
+                        println!("Backend '{backend_name}' is already installed.");
+                    } else {
+                        eprintln!("warning: failed to install '{backend_name}': {e}");
+                    }
+                }
+            }
+        }
+
+        if !any {
+            println!("No backends configured in config.");
+        } else if any_installed {
+            let mut config = Config::load()?;
+            if config.default_backend.is_none() {
+                if let Some((name, _)) = config.backends.first_key_value() {
+                    config.default_backend = Some(name.clone());
+                    config.save()?;
+                    println!("Default backend set to '{name}'.");
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn install_single(config: &Config, name: &str) -> anyhow::Result<()> {
     paths::validate_backend_name(name)?;
 
-    let config = Config::load()?;
     let backend = config.resolve(name)?;
     let canonical = &backend.name;
     let dest = paths::backend_dir(canonical);
@@ -93,13 +142,6 @@ pub fn install(name: &str) -> anyhow::Result<()> {
 
     println!("Backend '{canonical}' installed successfully.");
     crate::db::index_backend(backend)?;
-
-    let mut config = Config::load()?;
-    if config.default_backend.is_none() {
-        config.default_backend = Some(canonical.clone());
-        config.save()?;
-        println!("Default backend set to '{canonical}'.");
-    }
 
     Ok(())
 }
@@ -382,6 +424,8 @@ pub fn list_topics(name: &str) -> anyhow::Result<()> {
         return Err(UnimanError::BackendNotInstalled(canonical.to_string()).into());
     }
 
+    crate::fzf::require_fzf()?;
+
     let topics = crate::db::list_topics_for_backend(canonical)?;
 
     if topics.is_empty() {
@@ -389,11 +433,28 @@ pub fn list_topics(name: &str) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!("{:<6} {:<40} {}", "SEC", "NAME", "DESCRIPTION");
-    for (section, topic_name, description) in &topics {
-        println!("{:<6} {:<40} {}", section, topic_name, description);
-    }
-    println!("\n{} topic(s) in backend '{canonical}'.", topics.len());
+    let lines: Vec<String> = topics
+        .iter()
+        .map(|(section, topic_name, description)| {
+            let display_name = format!("{}({})", topic_name, section);
+            // 1=section, 2=name, 3=display_name, 4=description
+            format!("{}\t{}\t{:<40}\t{}", section, topic_name, display_name, description)
+        })
+        .collect();
+
+    let header = format!("{:<40}\t{}", "NAME", "DESCRIPTION");
+
+    // Use the running binary's path so the execute command works regardless
+    // of how uniman is installed (PATH, full path, cargo run, etc.).
+    let exe = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "uniman".to_string());
+
+    // {1} = section, {2} = name
+    let execute_template = format!("{} {} {{1}} {{2}}", exe, canonical);
+
+    crate::fzf::browse(&header, &execute_template, Some("3,4"), &lines)?;
 
     Ok(())
 }
