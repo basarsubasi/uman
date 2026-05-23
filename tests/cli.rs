@@ -1,5 +1,5 @@
 use clap::Parser;
-use uman::cli::{BackendAction, Commands};
+use uman::cli::Commands;
 
 #[test]
 fn parse_read_three_args() {
@@ -38,6 +38,15 @@ fn parse_update_all() {
 }
 
 #[test]
+fn parse_list() {
+    let cli = uman::cli::Cli::try_parse_from(["uman", "list"]).unwrap();
+    match cli.command {
+        Some(Commands::List) => {}
+        other => panic!("expected List, got {:?}", other),
+    }
+}
+
+#[test]
 fn parse_update_single() {
     let cli = uman::cli::Cli::try_parse_from(["uman", "update", "linux-upstream"]).unwrap();
     match cli.command {
@@ -71,38 +80,20 @@ fn parse_search_with_keyword_flag() {
 }
 
 #[test]
-fn parse_backend_list() {
-    let cli = uman::cli::Cli::try_parse_from(["uman", "backend", "list"]).unwrap();
+fn parse_default_show() {
+    let cli = uman::cli::Cli::try_parse_from(["uman", "default"]).unwrap();
     match cli.command {
-        Some(Commands::Backend { action }) => match action {
-            BackendAction::List => {}
-            other => panic!("expected List, got {:?}", other),
-        },
-        other => panic!("expected Backend, got {:?}", other),
+        Some(Commands::Default { name }) => assert!(name.is_none()),
+        other => panic!("expected Default, got {:?}", other),
     }
 }
 
 #[test]
-fn parse_backend_default_show() {
-    let cli = uman::cli::Cli::try_parse_from(["uman", "backend", "default"]).unwrap();
+fn parse_default_set() {
+    let cli = uman::cli::Cli::try_parse_from(["uman", "default", "linux-upstream"]).unwrap();
     match cli.command {
-        Some(Commands::Backend { action }) => match action {
-            BackendAction::Default { name } => assert!(name.is_none()),
-            other => panic!("expected Default, got {:?}", other),
-        },
-        other => panic!("expected Backend, got {:?}", other),
-    }
-}
-
-#[test]
-fn parse_backend_default_set() {
-    let cli = uman::cli::Cli::try_parse_from(["uman", "backend", "default", "linux-upstream"]).unwrap();
-    match cli.command {
-        Some(Commands::Backend { action }) => match action {
-            BackendAction::Default { name } => assert_eq!(name.as_deref(), Some("linux-upstream")),
-            other => panic!("expected Default, got {:?}", other),
-        },
-        other => panic!("expected Backend, got {:?}", other),
+        Some(Commands::Default { name }) => assert_eq!(name.as_deref(), Some("linux-upstream")),
+        other => panic!("expected Default, got {:?}", other),
     }
 }
 

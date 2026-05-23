@@ -15,6 +15,13 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(command) = cli.command {
         match command {
+            cli::Commands::List => {
+                backend::list()?;
+            }
+            cli::Commands::Default { name } => match name {
+                Some(n) => backend::set_default(&n)?,
+                None => backend::show_default()?,
+            },
             cli::Commands::Install { backend } => {
                 backend::install(&backend)?;
             }
@@ -31,17 +38,6 @@ fn main() -> anyhow::Result<()> {
                     search::run_filename(&topic)?;
                 }
             }
-            cli::Commands::Backend { action } => match action {
-                cli::BackendAction::List => {
-                    backend::list()?;
-                }
-                cli::BackendAction::Default { name } => {
-                    match name {
-                        Some(n) => backend::set_default(&n)?,
-                        None => backend::show_default()?,
-                    }
-                }
-            },
         }
     } else if let Some(first) = cli.backend {
         dispatch_read(first, cli.section, cli.topic)?;

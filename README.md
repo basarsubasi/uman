@@ -82,9 +82,9 @@ uman 2 execve            # section + topic with default backend
 Change or view the default:
 
 ```bash
-uman backend default              # show current default
-uman backend default linux        # set by alias
-uman backend default linux-upstream  # set by name
+uman default              # show current default
+uman default linux        # set by alias
+uman default linux-upstream  # set by name
 ```
 
 ### Storage layout
@@ -135,7 +135,7 @@ The first installed backend is automatically set as the default.
 ### Listing backends
 
 ```bash
-uman backend list
+uman list
 ```
 
 Output:
@@ -144,14 +144,6 @@ Output:
 NAME                 DEFAULT    STATUS     FORMAT SOURCE
 linux-upstream       *          installed  roff   https://github.com/mkerrisk/man-pages
 freebsd                         available  roff   https://gitlab.freebsd.org/freebsd/doc-manual.git
-```
-
-### Setting the default backend
-
-```bash
-uman backend default              # show current default
-uman backend default linux        # set by alias
-uman backend default linux-upstream  # set by name
 ```
 
 ### Searching

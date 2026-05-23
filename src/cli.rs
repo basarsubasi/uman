@@ -24,6 +24,15 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    #[command(about = "List configured backends and their status")]
+    List,
+    #[command(about = "Set or show the default backend", long_about = "Without an argument, shows the current default backend.\n\
+                 With an argument, sets the default backend to the given name or alias.\n\
+                 The backend must exist in config and be installed.")]
+    Default {
+        #[arg(help = "Name or alias of the backend to set as default")]
+        name: Option<String>,
+    },
     #[command(about = "Install a backend", long_about = "Download and index a man page backend.\n\
                  The backend name must match an entry in the config (or an alias).")]
     Install {
@@ -47,23 +56,5 @@ pub enum Commands {
         keyword: bool,
         #[arg(help = "Search term")]
         topic: String,
-    },
-    #[command(about = "Manage backends", long_about = "Backend management subcommands.")]
-    Backend {
-        #[command(subcommand)]
-        action: BackendAction,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub enum BackendAction {
-    #[command(about = "List configured backends and their status")]
-    List,
-    #[command(about = "Set or show the default backend", long_about = "Without an argument, shows the current default backend.\n\
-                 With an argument, sets the default backend to the given name or alias.\n\
-                 The backend must exist in config and be installed.")]
-    Default {
-        #[arg(help = "Name or alias of the backend to set as default")]
-        name: Option<String>,
     },
 }
