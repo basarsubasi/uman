@@ -62,11 +62,12 @@ pub fn install(name: &str) -> anyhow::Result<()> {
     paths::validate_backend_name(name)?;
 
     let config = Config::load()?;
-    let backend = config.get_backend(name)?;
-    let dest = paths::backend_dir(&backend.name);
+    let backend = config.resolve(name)?;
+    let canonical = &backend.name;
+    let dest = paths::backend_dir(canonical);
 
     if dest.exists() {
-        return Err(UmanError::BackendAlreadyInstalled(name.to_string()).into());
+        return Err(UmanError::BackendAlreadyInstalled(canonical.to_string()).into());
     }
 
     paths::ensure_dirs()?;
@@ -83,15 +84,22 @@ pub fn install(name: &str) -> anyhow::Result<()> {
     };
 
     if result.is_err() {
-        // Rollback: clean up partial download
         if dest.exists() {
             let _ = std::fs::remove_dir_all(&dest);
         }
         return result;
     }
 
-    println!("Backend '{name}' installed successfully.");
-    crate::db::index_backend(&backend)?;
+    println!("Backend '{canonical}' installed successfully.");
+    crate::db::index_backend(backend)?;
+
+    let mut config = Config::load()?;
+    if config.default_backend.is_none() {
+        config.default_backend = Some(canonical.clone());
+        config.save()?;
+        println!("Default backend set to '{canonical}'.");
+    }
+
     Ok(())
 }
 
@@ -130,7 +138,6 @@ fn install_curl(source: &str, dest: &std::path::Path) -> anyhow::Result<()> {
     );
 
     if result.is_err() {
-        // Clean up partial extraction
         if dest.exists() {
             let _ = std::fs::remove_dir_all(dest);
         }
@@ -142,16 +149,24 @@ fn install_curl(source: &str, dest: &std::path::Path) -> anyhow::Result<()> {
 pub fn remove(name: &str) -> anyhow::Result<()> {
     paths::validate_backend_name(name)?;
 
-    let dest = paths::backend_dir(name);
+    let config = Config::load()?;
+    let backend = config.resolve(name)?;
+    let canonical = &backend.name;
+    let dest = paths::backend_dir(canonical);
+
     if !dest.exists() {
-        return Err(UmanError::BackendNotInstalled(name.to_string()).into());
+        return Err(UmanError::BackendNotInstalled(canonical.to_string()).into());
     }
 
     std::fs::remove_dir_all(&dest)?;
 
-    crate::db::remove_backend_entries(name)?;
+    crate::db::remove_backend_entries(canonical)?;
 
-    println!("Backend '{name}' removed.");
+    if config.default_backend.as_deref() == Some(canonical) {
+        eprintln!("warning: '{canonical}' was the default backend. Set a new default with 'uman backend default <name>'.");
+    }
+
+    println!("Backend '{canonical}' removed.");
     Ok(())
 }
 
@@ -160,14 +175,15 @@ pub fn update(name: Option<&str>) -> anyhow::Result<()> {
 
     if let Some(name) = name {
         paths::validate_backend_name(name)?;
-        let def = config.get_backend(name)?;
-        let dir = paths::backend_dir(name);
+        let def = config.resolve(name)?;
+        let canonical = &def.name;
+        let dir = paths::backend_dir(canonical);
         if !dir.exists() {
-            return Err(UmanError::BackendNotInstalled(name.to_string()).into());
+            return Err(UmanError::BackendNotInstalled(canonical.to_string()).into());
         }
 
         update_single(def, &dir)?;
-        println!("Backend '{name}' updated.");
+        println!("Backend '{canonical}' updated.");
     } else {
         let mut any = false;
         for (name, def) in &config.backends {
@@ -217,20 +233,16 @@ fn update_single(def: &crate::config::BackendDef, dir: &std::path::Path) -> anyh
         FetchMethod::Curl => {
             check_command_exists("curl")?;
 
-            // Download-first-then-swap: download to temp, verify, then swap
             let name = &def.name;
             let dest = paths::backend_dir(name);
             let staging = paths::backends_dir().join(format!("{}.staging", name));
 
-            // Clean up any leftover staging directory
             if staging.exists() {
                 std::fs::remove_dir_all(&staging)?;
             }
 
-            // Download to staging directory
             install_curl(&def.source, &staging)?;
 
-            // Swap: remove old, rename staging
             if dest.exists() {
                 std::fs::remove_dir_all(&dest)?;
             }
@@ -249,14 +261,71 @@ pub fn list() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!("{:<20} {:<10} {} {}", "NAME", "STATUS", "FORMAT", "SOURCE");
-    for (name, def) in &config.backends {
+    let default_name = config.default_backend.as_deref();
+    let mut sorted: Vec<_> = config.backends.iter().collect();
+    sorted.sort_by(|a, b| {
+        let a_is_default = default_name == Some(a.0.as_str()) || default_name.map(|d| a.1.aliases.contains(&d.to_string())).unwrap_or(false);
+        let b_is_default = default_name == Some(b.0.as_str()) || default_name.map(|d| b.1.aliases.contains(&d.to_string())).unwrap_or(false);
+        b_is_default.cmp(&a_is_default).then(a.0.cmp(b.0))
+    });
+
+    let mut has_default = false;
+    println!("{:<20} {:<10} {:<10} {} {}", "NAME", "DEFAULT", "STATUS", "FORMAT", "SOURCE");
+    for (name, def) in &sorted {
+        let is_default = default_name == Some(name.as_str());
+        let default_marker = if is_default { "*" } else { "" };
+        if is_default { has_default = true; }
         let installed = paths::backend_dir(name).exists();
         let status = if installed { "installed" } else { "available" };
         println!(
-            "{:<20} {:<10} {} {}",
-            name, status, def.format, def.source
+            "{:<20} {:<10} {:<10} {} {}",
+            name, default_marker, status, def.format, def.source
         );
+    }
+
+    if !has_default && default_name.is_some() {
+        println!("\nwarning: default backend '{}' is not installed", default_name.unwrap());
+    }
+
+    Ok(())
+}
+
+pub fn set_default(name: &str) -> anyhow::Result<()> {
+    paths::validate_backend_name(name)?;
+
+    let config = Config::load()?;
+    let backend = config.resolve(name)?;
+    let canonical = &backend.name;
+
+    if !paths::backend_dir(canonical).exists() {
+        return Err(UmanError::DefaultNotInstalled(canonical.clone()).into());
+    }
+
+    let mut config = Config::load()?;
+    config.default_backend = Some(canonical.clone());
+    config.save()?;
+
+    println!("Default backend set to '{canonical}'.");
+    Ok(())
+}
+
+pub fn show_default() -> anyhow::Result<()> {
+    let config = Config::load()?;
+    match &config.default_backend {
+        Some(name) => {
+            let display = match config.resolve(name) {
+                Ok(def) => {
+                    if def.name != name.as_str() {
+                        format!("{} (alias: {})", def.name, name)
+                    } else {
+                        def.name.clone()
+                    }
+                }
+                Err(_) => name.clone(),
+            };
+            println!("{}", display);
+        }
+        None => println!("No default backend set."),
     }
     Ok(())
 }

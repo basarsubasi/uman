@@ -74,6 +74,8 @@ pub struct BackendDef {
     pub format: ManFormat,
     #[serde(default = "default_fetching", deserialize_with = "deserialize_fetching")]
     pub fetching: FetchMethod,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
 }
 
 fn default_format() -> ManFormat {
@@ -103,6 +105,8 @@ where
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub backends: BTreeMap<String, BackendDef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_backend: Option<String>,
 }
 
 impl Config {
@@ -134,6 +138,39 @@ impl Config {
             .ok_or_else(|| UmanError::BackendNotFound(name.to_string()))
     }
 
+    pub fn resolve(&self, name: &str) -> Result<&BackendDef, UmanError> {
+        if let Some(def) = self.backends.get(name) {
+            return Ok(def);
+        }
+        for def in self.backends.values() {
+            if def.aliases.iter().any(|a| a == name) {
+                return Ok(def);
+            }
+        }
+        // Also check defaults for well-known aliases
+        let defaults = Self::defaults();
+        for def in defaults.backends.values() {
+            if def.aliases.iter().any(|a| a == name) {
+                if let Some(our_def) = self.backends.get(&def.name) {
+                    return Ok(our_def);
+                }
+            }
+        }
+        Err(UmanError::BackendNotFound(name.to_string()))
+    }
+
+    pub fn get_default_backend(&self) -> Result<&BackendDef, UmanError> {
+        let name = self
+            .default_backend
+            .as_ref()
+            .ok_or(UmanError::NoDefaultBackend)?;
+        let def = self.resolve(name)?;
+        if !crate::paths::backend_dir(&def.name).exists() {
+            return Err(UmanError::DefaultNotInstalled(def.name.clone()));
+        }
+        Ok(def)
+    }
+
     pub fn defaults() -> Self {
         let mut backends = BTreeMap::new();
         backends.insert(
@@ -143,6 +180,7 @@ impl Config {
                 source: "https://github.com/mkerrisk/man-pages".to_string(),
                 format: ManFormat::Roff,
                 fetching: FetchMethod::Git,
+                aliases: vec!["linux".to_string()],
             },
         );
         backends.insert(
@@ -152,9 +190,13 @@ impl Config {
                 source: "https://gitlab.freebsd.org/freebsd/doc-manual.git".to_string(),
                 format: ManFormat::Roff,
                 fetching: FetchMethod::Git,
+                aliases: vec!["bsd".to_string()],
             },
         );
-        Self { backends }
+        Self {
+            backends,
+            default_backend: None,
+        }
     }
 }
 
@@ -178,6 +220,13 @@ mod tests {
         assert_eq!(linux.source, "https://github.com/mkerrisk/man-pages");
         assert_eq!(linux.format, ManFormat::Roff);
         assert_eq!(linux.fetching, FetchMethod::Git);
+        assert!(linux.aliases.contains(&"linux".to_string()));
+    }
+
+    #[test]
+    fn defaults_has_no_default_backend() {
+        let config = Config::defaults();
+        assert!(config.default_backend.is_none());
     }
 
     #[test]
@@ -200,6 +249,69 @@ mod tests {
     }
 
     #[test]
+    fn resolve_by_name() {
+        let config = Config::defaults();
+        let def = config.resolve("linux-upstream").unwrap();
+        assert_eq!(def.name, "linux-upstream");
+    }
+
+    #[test]
+    fn resolve_by_alias() {
+        let config = Config::defaults();
+        let def = config.resolve("linux").unwrap();
+        assert_eq!(def.name, "linux-upstream");
+    }
+
+    #[test]
+    fn resolve_by_alias_bsd() {
+        let config = Config::defaults();
+        let def = config.resolve("bsd").unwrap();
+        assert_eq!(def.name, "freebsd");
+    }
+
+    #[test]
+    fn resolve_not_found() {
+        let config = Config::defaults();
+        let result = config.resolve("nope");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            UmanError::BackendNotFound(name) => assert_eq!(name, "nope"),
+            other => panic!("expected BackendNotFound, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn get_default_backend_none_set() {
+        let config = Config::defaults();
+        let result = config.get_default_backend();
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            UmanError::NoDefaultBackend => {}
+            other => panic!("expected NoDefaultBackend, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn get_default_backend_set_but_not_installed() {
+        let mut config = Config::defaults();
+        config.default_backend = Some("freebsd".to_string());
+        let result = config.get_default_backend();
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            UmanError::DefaultNotInstalled(name) => assert_eq!(name, "freebsd"),
+            other => panic!("expected DefaultNotInstalled, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn get_default_backend_with_alias() {
+        let mut config = Config::defaults();
+        config.default_backend = Some("linux".to_string());
+        let def = config.resolve("linux").unwrap();
+        assert_eq!(def.name, "linux-upstream");
+    }
+
+    #[test]
     fn config_serialization_roundtrip() {
         let config = Config::defaults();
         let json = serde_json::to_string(&config).unwrap();
@@ -207,6 +319,16 @@ mod tests {
         assert_eq!(deserialized.backends.len(), config.backends.len());
         assert!(deserialized.backends.contains_key("linux-upstream"));
         assert!(deserialized.backends.contains_key("freebsd"));
+        assert!(deserialized.default_backend.is_none());
+    }
+
+    #[test]
+    fn config_with_default_backend_roundtrip() {
+        let mut config = Config::defaults();
+        config.default_backend = Some("linux-upstream".to_string());
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: Config = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.default_backend, Some("linux-upstream".to_string()));
     }
 
     #[test]
@@ -225,6 +347,7 @@ mod tests {
             source: "https://example.com/repo".to_string(),
             format: ManFormat::Roff,
             fetching: FetchMethod::Curl,
+            aliases: vec!["tb".to_string(), "test".to_string()],
         };
         let json = serde_json::to_string(&def).unwrap();
         let parsed: BackendDef = serde_json::from_str(&json).unwrap();
@@ -232,6 +355,19 @@ mod tests {
         assert_eq!(parsed.source, "https://example.com/repo");
         assert_eq!(parsed.format, ManFormat::Roff);
         assert_eq!(parsed.fetching, FetchMethod::Curl);
+        assert_eq!(parsed.aliases, vec!["tb", "test"]);
+    }
+
+    #[test]
+    fn backend_def_without_aliases_roundtrip() {
+        let json = r#"{
+            "name": "minimal",
+            "source": "https://example.com",
+            "format": "roff",
+            "fetching": "git"
+        }"#;
+        let parsed: BackendDef = serde_json::from_str(json).unwrap();
+        assert!(parsed.aliases.is_empty());
     }
 
     #[test]

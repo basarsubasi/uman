@@ -12,7 +12,7 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    #[arg(help = "Backend name (e.g. linux-upstream)")]
+    #[arg(help = "Backend name or alias (e.g. linux-upstream, linux)")]
     pub backend: Option<String>,
 
     #[arg(help = "Man page section (e.g. 2, 3)")]
@@ -25,19 +25,19 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     #[command(about = "Install a backend", long_about = "Download and index a man page backend.\n\
-                 The backend name must match an entry in the config.")]
+                 The backend name must match an entry in the config (or an alias).")]
     Install {
-        #[arg(help = "Name of the backend to install")]
+        #[arg(help = "Name or alias of the backend to install")]
         backend: String,
     },
     #[command(about = "Remove a backend", long_about = "Remove an installed backend and delete its data and index entries.")]
     Remove {
-        #[arg(help = "Name of the backend to remove")]
+        #[arg(help = "Name or alias of the backend to remove")]
         backend: String,
     },
     #[command(about = "Update backends", long_about = "Pull latest changes for one or all installed backends, then re-index.")]
     Update {
-        #[arg(help = "Name of the backend to update (updates all if omitted)")]
+        #[arg(help = "Name or alias of the backend to update (updates all if omitted)")]
         backend: Option<String>,
     },
     #[command(about = "Search for man pages", long_about = "Search installed backends for man pages.\n\n\
@@ -59,4 +59,11 @@ pub enum Commands {
 pub enum BackendAction {
     #[command(about = "List configured backends and their status")]
     List,
+    #[command(about = "Set or show the default backend", long_about = "Without an argument, shows the current default backend.\n\
+                 With an argument, sets the default backend to the given name or alias.\n\
+                 The backend must exist in config and be installed.")]
+    Default {
+        #[arg(help = "Name or alias of the backend to set as default")]
+        name: Option<String>,
+    },
 }

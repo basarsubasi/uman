@@ -76,6 +76,31 @@ fn parse_backend_list() {
     match cli.command {
         Some(Commands::Backend { action }) => match action {
             BackendAction::List => {}
+            other => panic!("expected List, got {:?}", other),
+        },
+        other => panic!("expected Backend, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_backend_default_show() {
+    let cli = uman::cli::Cli::try_parse_from(["uman", "backend", "default"]).unwrap();
+    match cli.command {
+        Some(Commands::Backend { action }) => match action {
+            BackendAction::Default { name } => assert!(name.is_none()),
+            other => panic!("expected Default, got {:?}", other),
+        },
+        other => panic!("expected Backend, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_backend_default_set() {
+    let cli = uman::cli::Cli::try_parse_from(["uman", "backend", "default", "linux-upstream"]).unwrap();
+    match cli.command {
+        Some(Commands::Backend { action }) => match action {
+            BackendAction::Default { name } => assert_eq!(name.as_deref(), Some("linux-upstream")),
+            other => panic!("expected Default, got {:?}", other),
         },
         other => panic!("expected Backend, got {:?}", other),
     }

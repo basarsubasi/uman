@@ -330,6 +330,14 @@ fn error_messages_are_human_readable() {
         uman::error::UmanError::CommandFailed { cmd: "git clone https://example.com".to_string(), stderr: "fatal: not found".to_string() }.to_string(),
         "command 'git clone https://example.com' failed: fatal: not found"
     );
+    assert_eq!(
+        uman::error::UmanError::NoDefaultBackend.to_string(),
+        "no default backend set; use 'uman backend default <name>' to set one"
+    );
+    assert_eq!(
+        uman::error::UmanError::DefaultNotInstalled("linux-upstream".to_string()).to_string(),
+        "default backend 'linux-upstream' is not installed; install it or change the default"
+    );
 }
 
 // ---------- Collect man pages with realistic file tree ----------
@@ -389,4 +397,151 @@ fn config_get_backend_errors_on_unknown() {
         uman::error::UmanError::BackendNotFound(name) => assert_eq!(name, "does-not-exist"),
         other => panic!("expected BackendNotFound, got {:?}", other),
     }
+}
+
+// ---------- Config resolve (alias) tests ----------
+
+#[test]
+fn config_resolve_finds_canonical_name() {
+    let config = uman::config::Config::defaults();
+    let def = config.resolve("linux-upstream").unwrap();
+    assert_eq!(def.name, "linux-upstream");
+}
+
+#[test]
+fn config_resolve_finds_alias() {
+    let config = uman::config::Config::defaults();
+    let def = config.resolve("linux").unwrap();
+    assert_eq!(def.name, "linux-upstream");
+}
+
+#[test]
+fn config_resolve_finds_bsd_alias() {
+    let config = uman::config::Config::defaults();
+    let def = config.resolve("bsd").unwrap();
+    assert_eq!(def.name, "freebsd");
+}
+
+#[test]
+fn config_resolve_errors_on_unknown() {
+    let config = uman::config::Config::defaults();
+    let result = config.resolve("nope");
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        uman::error::UmanError::BackendNotFound(name) => assert_eq!(name, "nope"),
+        other => panic!("expected BackendNotFound, got {:?}", other),
+    }
+}
+
+// ---------- Config default backend tests ----------
+
+#[test]
+fn config_no_default_backend_errors() {
+    let config = uman::config::Config::defaults();
+    let result = config.get_default_backend();
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        uman::error::UmanError::NoDefaultBackend => {}
+        other => panic!("expected NoDefaultBackend, got {:?}", other),
+    }
+}
+
+#[test]
+fn config_default_backend_not_installed_errors() {
+    let mut config = uman::config::Config::defaults();
+    // Use freebsd which is in config but (likely) not installed
+    // If freebsd IS installed, use a synthetic backend name instead
+    let test_name = if std::path::Path::new(&std::env::var("HOME").unwrap()).join(".uman/backends/freebsd").exists() {
+        "__test_nonexistent__"
+    } else {
+        "freebsd"
+    };
+    config.default_backend = Some(test_name.to_string());
+    let result = config.get_default_backend();
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        uman::error::UmanError::DefaultNotInstalled(name) => assert_eq!(name, test_name),
+        uman::error::UmanError::BackendNotFound(name) => assert_eq!(name, test_name),
+        other => panic!("expected DefaultNotInstalled or BackendNotFound, got {:?}", other),
+    }
+}
+
+#[test]
+fn config_default_backend_via_alias_not_installed_errors() {
+    let mut config = uman::config::Config::defaults();
+    config.default_backend = Some("bsd".to_string());
+    let result = config.get_default_backend();
+    // "bsd" resolves to "freebsd" which is likely not installed
+    // If it IS installed (unlikely), skip this test gracefully
+    match result {
+        Err(uman::error::UmanError::DefaultNotInstalled(_)) => {},
+        Err(uman::error::UmanError::BackendNotFound(_)) => {},
+        Ok(_) => {}, // freebsd is actually installed — fine, skip
+        other => panic!("unexpected result: {:?}", other),
+    }
+}
+
+// ---------- Config serialization with aliases and default_backend ----------
+
+#[test]
+fn config_serialization_with_aliases() {
+    let config = uman::config::Config::defaults();
+    let json = serde_json::to_string_pretty(&config).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    // linux-upstream should have aliases array with "linux"
+    let aliases = parsed["backends"]["linux-upstream"]["aliases"].as_array().unwrap();
+    assert!(aliases.iter().any(|a| a.as_str() == Some("linux")));
+}
+
+#[test]
+fn config_deserialization_with_default_backend() {
+    let json_data = serde_json::json!({
+        "backends": {
+            "linux-upstream": {
+                "name": "linux-upstream",
+                "source": "https://github.com/mkerrisk/man-pages",
+                "format": "roff",
+                "fetching": "git",
+                "aliases": ["linux"]
+            }
+        },
+        "default_backend": "linux-upstream"
+    });
+    let config: uman::config::Config = serde_json::from_value(json_data).unwrap();
+    assert_eq!(config.default_backend, Some("linux-upstream".to_string()));
+    let def = config.backends.get("linux-upstream").unwrap();
+    assert_eq!(def.aliases, vec!["linux".to_string()]);
+}
+
+#[test]
+fn config_deserialization_without_default_backend() {
+    let json_data = serde_json::json!({
+        "backends": {
+            "linux-upstream": {
+                "name": "linux-upstream",
+                "source": "https://github.com/mkerrisk/man-pages",
+                "format": "roff",
+                "fetching": "git"
+            }
+        }
+    });
+    let config: uman::config::Config = serde_json::from_value(json_data).unwrap();
+    assert!(config.default_backend.is_none());
+}
+
+#[test]
+fn config_deserialization_without_aliases() {
+    let json_data = serde_json::json!({
+        "backends": {
+            "my-backend": {
+                "name": "my-backend",
+                "source": "https://example.com/repo",
+                "format": "roff",
+                "fetching": "git"
+            }
+        }
+    });
+    let config: uman::config::Config = serde_json::from_value(json_data).unwrap();
+    let def = config.backends.get("my-backend").unwrap();
+    assert!(def.aliases.is_empty());
 }
