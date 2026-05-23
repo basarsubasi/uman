@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use clap::builder::ValueHint;
 use clap_complete::Shell;
 
 #[derive(Parser, Debug)]
@@ -13,13 +14,13 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    #[arg(help = "Backend name or alias (e.g. linux-upstream, linux)")]
+    #[arg(help = "Backend name or alias (e.g. linux-upstream, linux)", value_hint = ValueHint::Other)]
     pub backend: Option<String>,
 
-    #[arg(help = "Man page section (e.g. 2, 3)")]
+    #[arg(help = "Man page section (e.g. 2, 3)", value_hint = ValueHint::Other)]
     pub section: Option<String>,
 
-    #[arg(help = "Man page topic (e.g. execve, printf)")]
+    #[arg(help = "Man page topic (e.g. execve, printf)", value_hint = ValueHint::Other)]
     pub topic: Option<String>,
 }
 
@@ -29,7 +30,7 @@ pub enum Commands {
               long_about = "Without an argument, lists all configured backends and their status.\n\
                  With a backend name or alias, lists all topics indexed for that backend.")]
     List {
-        #[arg(help = "Name or alias of the backend to list topics for (lists backends if omitted)")]
+        #[arg(help = "Name or alias of the backend to list topics for (lists backends if omitted)", value_hint = ValueHint::Other)]
         backend: Option<String>,
     },
     #[command(about = "Print the config file path")]
@@ -43,23 +44,23 @@ pub enum Commands {
                  With an argument, sets the default backend to the given name or alias.\n\
                  The backend must exist in config and be installed.")]
     Default {
-        #[arg(help = "Name or alias of the backend to set as default")]
+        #[arg(help = "Name or alias of the backend to set as default", value_hint = ValueHint::Other)]
         name: Option<String>,
     },
     #[command(about = "Install a backend", long_about = "Download and index a man page backend.\n\
                  The backend name must match an entry in the config (or an alias).")]
     Install {
-        #[arg(help = "Name or alias of the backend to install")]
+        #[arg(help = "Name or alias of the backend to install", value_hint = ValueHint::Other)]
         backend: String,
     },
     #[command(about = "Remove a backend", long_about = "Remove an installed backend and delete its data and index entries.")]
     Remove {
-        #[arg(help = "Name or alias of the backend to remove")]
+        #[arg(help = "Name or alias of the backend to remove", value_hint = ValueHint::Other)]
         backend: String,
     },
     #[command(about = "Update backends", long_about = "Pull latest changes for one or all installed backends, then re-index.")]
     Update {
-        #[arg(help = "Name or alias of the backend to update (updates all if omitted)")]
+        #[arg(help = "Name or alias of the backend to update (updates all if omitted)", value_hint = ValueHint::Other)]
         backend: Option<String>,
     },
     #[command(about = "Search for man pages", long_about = "Search installed backends for man pages.\n\n\
@@ -67,7 +68,7 @@ pub enum Commands {
     Search {
         #[arg(short, long, help = "Search by keyword (name + description) instead of filename")]
         keyword: bool,
-        #[arg(help = "Search term")]
+        #[arg(help = "Search term", value_hint = ValueHint::Other)]
         topic: String,
     },
 }
