@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use clap_complete::Shell;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -28,6 +29,11 @@ pub enum Commands {
     List,
     #[command(about = "Print the config file path")]
     Config,
+    #[command(about = "Generate shell completion scripts")]
+    Completion {
+        #[arg(value_enum, help = "Shell type")]
+        shell: Shell,
+    },
     #[command(about = "Set or show the default backend", long_about = "Without an argument, shows the current default backend.\n\
                  With an argument, sets the default backend to the given name or alias.\n\
                  The backend must exist in config and be installed.")]

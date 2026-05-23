@@ -150,6 +150,28 @@ uman list
 uman config
 ```
 
+### Shell completions
+
+Generate completions:
+
+```bash
+uman completion bash
+uman completion zsh
+```
+
+Add it to your shell config
+
+```bash
+
+for bash:
+
+uman completion bash > /usr/local/share/bash-completion/completions/uman
+
+for zsh:
+
+uman completion zsh > /usr/local/share/zsh/site-functions/_uman
+```
+
 Output:
 
 ```

@@ -1,4 +1,5 @@
 use clap::Parser;
+use clap_complete::Shell;
 use uman::cli::Commands;
 
 #[test]
@@ -52,6 +53,15 @@ fn parse_config() {
     match cli.command {
         Some(Commands::Config) => {}
         other => panic!("expected Config, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_completion_bash() {
+    let cli = uman::cli::Cli::try_parse_from(["uman", "completion", "bash"]).unwrap();
+    match cli.command {
+        Some(Commands::Completion { shell }) => assert_eq!(shell, Shell::Bash),
+        other => panic!("expected Completion, got {:?}", other),
     }
 }
 

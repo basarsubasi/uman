@@ -5,7 +5,8 @@ use uman::paths;
 use uman::render;
 use uman::search;
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::generate;
 
 fn is_numeric(s: &str) -> bool {
     s.chars().all(|c| c.is_ascii_digit()) && !s.is_empty()
@@ -21,6 +22,10 @@ fn main() -> anyhow::Result<()> {
             }
             cli::Commands::Config => {
                 println!("{}", paths::config_path().display());
+            }
+            cli::Commands::Completion { shell } => {
+                let mut cmd = cli::Cli::command();
+                generate(shell, &mut cmd, "uman", &mut std::io::stdout());
             }
             cli::Commands::Default { name } => match name {
                 Some(n) => backend::set_default(&n)?,
@@ -113,5 +118,6 @@ fn print_usage() {
     eprintln!("       uman search [-k] <topic>");
     eprintln!("       uman list");
     eprintln!("       uman config");
+    eprintln!("       uman completion <shell>");
     eprintln!("       uman default [<name>]");
 }
