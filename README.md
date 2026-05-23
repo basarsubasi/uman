@@ -13,6 +13,8 @@ uniman linux execve
 
 `git` is required for cloning backends. `curl` is needed for HTTP-backed backends.
 
+`fzf` is required for the interactive search and listing menus.
+
 
 
 ## Installation
@@ -163,52 +165,18 @@ uniman list linux-upstream
 uniman list linux          # alias works too
 ```
 
-Lists every man page topic indexed for that backend, sorted by section then name:
-
-```
-SEC    NAME                                     DESCRIPTION
-1      bash                                     GNU Bourne-Again SHell
-1      cp                                       copy files and directories
-2      execve                                   execute program
-2      open                                     open and possibly create a file
-3      printf                                   formatted output conversion
-...
-
-4821 topic(s) in backend 'linux-upstream'.
-```
+Opens an interactive `fzf` menu showing every man page topic indexed for that backend. You can fuzzy-search by name or description. Press `Enter` to read the man page. When you quit the pager, you'll be returned directly to the `fzf` menu.
 
 
 ### Searching
 
 ```bash
-uniman search <topic>         # filename search (default)
-uniman search -k <keyword>    # keyword search (name + description)
+uniman search                 # interactive fzf menu of all installed pages
+uniman search <topic>         # interactive fzf menu filtered by name
+uniman search -k <keyword>    # interactive fzf menu filtered by keyword (name + description)
 ```
 
-```bash
-uniman search execve
-```
-
-Output:
-
-```
-BACKEND              SECTION    NAME
-linux-upstream       2          execve
-linux-upstream       2          execveat
-linux-upstream       3          fexecve
-```
-
-```bash
-uniman search -k execute
-```
-
-Output:
-
-```
-BACKEND              SECTION    NAME                             DESCRIPTION
-linux-upstream       2          execve                           execute program
-linux-upstream       2          execveat                         execute program relative to directory
-```
+Running any of these will open an interactive `fzf` menu where you can further filter the results and press `Enter` to read the man page. When you quit the pager, you'll be returned directly to the `fzf` menu.
 
 ### Shell completions
 
