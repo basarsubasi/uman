@@ -1,3 +1,4 @@
+use std::io::{self, Write};
 use std::process::Command;
 
 use crate::config::{Config, FetchMethod};
@@ -158,16 +159,85 @@ pub fn remove(name: &str) -> anyhow::Result<()> {
         return Err(UmanError::BackendNotInstalled(canonical.to_string()).into());
     }
 
+    if config.default_backend.as_deref() == Some(canonical) {
+        if !confirm_default_remove(canonical)? {
+            println!("Aborted.");
+            return Ok(());
+        }
+    }
+
     std::fs::remove_dir_all(&dest)?;
 
     crate::db::remove_backend_entries(canonical)?;
 
     if config.default_backend.as_deref() == Some(canonical) {
-        eprintln!("warning: '{canonical}' was the default backend. Set a new default with 'uman backend default <name>'.");
+        eprintln!("warning: '{canonical}' was the default backend. Set a new default with 'uman default <name>'.");
     }
 
     println!("Backend '{canonical}' removed.");
     Ok(())
+}
+
+fn confirm_default_remove(name: &str) -> anyhow::Result<bool> {
+    let mut stdout = io::stdout();
+    write!(
+        stdout,
+        "{} is the default man page backend, do you want to remove it?(Y/n) ",
+        name
+    )?;
+    stdout.flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    Ok(parse_confirm_response(&input))
+}
+
+fn parse_confirm_response(input: &str) -> bool {
+    let trimmed = input.trim().to_lowercase();
+
+    if trimmed.is_empty() || trimmed == "y" || trimmed == "yes" {
+        true
+    } else if trimmed == "n" || trimmed == "no" {
+        false
+    } else {
+        true
+    }
+}
+
+#[cfg(test)]
+mod confirm_tests {
+    use super::parse_confirm_response;
+
+    #[test]
+    fn confirm_response_accepts_empty_as_yes() {
+        assert!(parse_confirm_response(""));
+        assert!(parse_confirm_response("\n"));
+        assert!(parse_confirm_response("   \n"));
+    }
+
+    #[test]
+    fn confirm_response_accepts_yes() {
+        assert!(parse_confirm_response("y"));
+        assert!(parse_confirm_response("Y"));
+        assert!(parse_confirm_response("yes"));
+        assert!(parse_confirm_response("YES"));
+    }
+
+    #[test]
+    fn confirm_response_rejects_no() {
+        assert!(!parse_confirm_response("n"));
+        assert!(!parse_confirm_response("N"));
+        assert!(!parse_confirm_response("no"));
+        assert!(!parse_confirm_response("NO"));
+    }
+
+    #[test]
+    fn confirm_response_defaults_to_yes_for_other_input() {
+        assert!(parse_confirm_response("maybe"));
+        assert!(parse_confirm_response("lol"));
+        assert!(parse_confirm_response("yep"));
+    }
 }
 
 pub fn update(name: Option<&str>) -> anyhow::Result<()> {
