@@ -144,34 +144,6 @@ The first installed backend is automatically set as the default.
 uman list
 ```
 
-### Config path
-
-```bash
-uman config
-```
-
-### Shell completions
-
-Generate completions:
-
-```bash
-uman completion bash
-uman completion zsh
-```
-
-Add it to your shell config
-
-```bash
-
-for bash:
-
-uman completion bash > /usr/local/share/bash-completion/completions/uman
-
-for zsh:
-
-uman completion zsh > /usr/local/share/zsh/site-functions/_uman
-```
-
 Output:
 
 ```
@@ -179,6 +151,32 @@ NAME                 DEFAULT    STATUS     FORMAT SOURCE
 linux-upstream       *          installed  roff   https://github.com/mkerrisk/man-pages
 freebsd                         available  roff   https://gitlab.freebsd.org/freebsd/doc-manual.git
 ```
+
+### Listing topics in a backend
+
+```bash
+uman list <backend>
+```
+
+```bash
+uman list linux-upstream
+uman list linux          # alias works too
+```
+
+Lists every man page topic indexed for that backend, sorted by section then name:
+
+```
+SEC    NAME                                     DESCRIPTION
+1      bash                                     GNU Bourne-Again SHell
+1      cp                                       copy files and directories
+2      execve                                   execute program
+2      open                                     open and possibly create a file
+3      printf                                   formatted output conversion
+...
+
+4821 topic(s) in backend 'linux-upstream'.
+```
+
 
 ### Searching
 
@@ -211,3 +209,23 @@ BACKEND              SECTION    NAME                             DESCRIPTION
 linux-upstream       2          execve                           execute program
 linux-upstream       2          execveat                         execute program relative to directory
 ```
+
+### Shell completions
+
+#### bash
+
+Add to `~/.bashrc`:
+
+```bash
+eval "$(uman completion bash)"
+```
+
+#### zsh
+
+Add to `~/.zshrc`:
+
+```zsh
+eval "$(uman completion zsh)"
+```
+
+Then reload your shell: `exec $SHELL` or open a new terminal.
