@@ -2,11 +2,7 @@
 
 `uniman` read man pages of any operating system on any unix machine, natively.
 
-```bash
-uniman list
-uniman install freebsd (or linux, or macos etc.)
-uniman freebsd execve
-```
+https://github.com/user-attachments/assets/f292953a-0d72-4a23-b896-9bb3f6da32a8
 
 ## Dependencies
 
