@@ -361,6 +361,23 @@ pub fn search_by_keyword(keyword: &str) -> anyhow::Result<Vec<(String, i32, Stri
     })
 }
 
+pub fn list_topics_for_backend(backend: &str) -> anyhow::Result<Vec<(i32, String, String)>> {
+    with_conn(|conn| {
+        let mut stmt = conn.prepare(
+            "SELECT section, name, description FROM pages WHERE backend = ?1 ORDER BY section ASC, name ASC",
+        )?;
+
+        let results: Vec<(i32, String, String)> = stmt
+            .query_map(rusqlite::params![backend], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(results)
+    })
+}
+
 pub fn find_page(backend: &str, topic: &str) -> anyhow::Result<Option<(i32, String)>> {
     with_conn(|conn| {
         let mut stmt = conn.prepare(

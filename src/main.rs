@@ -17,9 +17,10 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(command) = cli.command {
         match command {
-            cli::Commands::List => {
-                backend::list()?;
-            }
+            cli::Commands::List { backend } => match backend {
+                Some(b) => backend::list_topics(&b)?,
+                None => backend::list()?,
+            },
             cli::Commands::Config => {
                 println!("{}", paths::config_path().display());
             }
@@ -117,6 +118,7 @@ fn print_usage() {
     eprintln!("       uman update [<backend>]");
     eprintln!("       uman search [-k] <topic>");
     eprintln!("       uman list");
+    eprintln!("       uman list <backend>");
     eprintln!("       uman config");
     eprintln!("       uman completion <shell>");
     eprintln!("       uman default [<name>]");

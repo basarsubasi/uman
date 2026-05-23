@@ -42,8 +42,17 @@ fn parse_update_all() {
 fn parse_list() {
     let cli = uman::cli::Cli::try_parse_from(["uman", "list"]).unwrap();
     match cli.command {
-        Some(Commands::List) => {}
+        Some(Commands::List { backend }) => assert!(backend.is_none()),
         other => panic!("expected List, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_list_backend() {
+    let cli = uman::cli::Cli::try_parse_from(["uman", "list", "linux-upstream"]).unwrap();
+    match cli.command {
+        Some(Commands::List { backend }) => assert_eq!(backend.as_deref(), Some("linux-upstream")),
+        other => panic!("expected List with backend, got {:?}", other),
     }
 }
 

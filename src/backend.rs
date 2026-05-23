@@ -371,6 +371,33 @@ pub fn list() -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn list_topics(name: &str) -> anyhow::Result<()> {
+    paths::validate_backend_name(name)?;
+
+    let config = Config::load()?;
+    let backend = config.resolve(name)?;
+    let canonical = &backend.name;
+
+    if !paths::backend_dir(canonical).exists() {
+        return Err(UmanError::BackendNotInstalled(canonical.to_string()).into());
+    }
+
+    let topics = crate::db::list_topics_for_backend(canonical)?;
+
+    if topics.is_empty() {
+        println!("No topics indexed for backend '{canonical}'. Try 'uman update {canonical}'.");
+        return Ok(());
+    }
+
+    println!("{:<6} {:<40} {}", "SEC", "NAME", "DESCRIPTION");
+    for (section, topic_name, description) in &topics {
+        println!("{:<6} {:<40} {}", section, topic_name, description);
+    }
+    println!("\n{} topic(s) in backend '{canonical}'.", topics.len());
+
+    Ok(())
+}
+
 fn is_default_backend(default_name: Option<&str>, backend_key: &str, aliases: &[String]) -> bool {
     match default_name {
         Some(dn) => dn == backend_key || aliases.iter().any(|a| a == dn),

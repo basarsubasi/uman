@@ -25,8 +25,13 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    #[command(about = "List configured backends and their status")]
-    List,
+    #[command(about = "List configured backends and their status, or list topics for a backend",
+              long_about = "Without an argument, lists all configured backends and their status.\n\
+                 With a backend name or alias, lists all topics indexed for that backend.")]
+    List {
+        #[arg(help = "Name or alias of the backend to list topics for (lists backends if omitted)")]
+        backend: Option<String>,
+    },
     #[command(about = "Print the config file path")]
     Config,
     #[command(about = "Generate shell completion scripts")]
