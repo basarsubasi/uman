@@ -1,12 +1,12 @@
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use crate::error::UmanError;
 
 pub fn find_renderer() -> Result<String, UmanError> {
     for cmd in &["man", "mandoc"] {
         if Command::new(cmd)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .env("MANPATH", "")
             .arg("-w")
             .status()
@@ -17,6 +17,29 @@ pub fn find_renderer() -> Result<String, UmanError> {
         }
     }
     Err(UmanError::NoRenderer)
+}
+
+fn build_command(
+    renderer: &str,
+    manpath: &str,
+    section: Option<&str>,
+    topic: &str,
+) -> Command {
+    let mut cmd = Command::new(renderer);
+    cmd.env("MANPATH", manpath);
+
+    match section {
+        Some(sec) => {
+            cmd.arg(sec);
+        }
+        None => {}
+    }
+    cmd.arg(topic);
+
+    cmd.stdout(Stdio::inherit())
+        .stderr(Stdio::piped());
+
+    cmd
 }
 
 pub fn read(backend_name: &str, section: Option<&str>, topic: &str) -> anyhow::Result<()> {
@@ -37,37 +60,34 @@ pub fn read(backend_name: &str, section: Option<&str>, topic: &str) -> anyhow::R
 
     let manpath = format!("{}:", backend_path.display());
 
-    let output = match &resolved_section {
-        Some(sec) => Command::new(&renderer)
-            .args([sec, topic])
-            .env("MANPATH", &manpath)
-            .output()?,
-        None => Command::new(&renderer)
-            .arg(topic)
-            .env("MANPATH", &manpath)
-            .output()?,
-    };
+    let mut cmd = build_command(
+        &renderer,
+        &manpath,
+        resolved_section.as_deref(),
+        topic,
+    );
+
+    let child = cmd.spawn()?;
+    let output = child.wait_with_output()?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let mut detail = stderr;
-        if !stdout.is_empty() {
-            if !detail.is_empty() {
-                detail.push('\n');
-            }
-            detail.push_str(&stdout);
-        }
-        if detail.is_empty() {
-            detail = format!("exit code {}", output.status.code().unwrap_or(-1));
-        }
+        let detail = if stderr.is_empty() {
+            format!("exit code {}", output.status.code().unwrap_or(-1))
+        } else {
+            stderr
+        };
+
         match &resolved_section {
-            Some(sec) => anyhow::bail!("man page not found: {backend_name} {sec} {topic}: {detail}"),
-            None => anyhow::bail!("man page not found: {backend_name} {topic}: {detail}"),
+            Some(sec) => anyhow::bail!(
+                "man page not found: {backend_name} {sec} {topic}: {detail}"
+            ),
+            None => anyhow::bail!(
+                "man page not found: {backend_name} {topic}: {detail}"
+            ),
         }
     }
 
-    print!("{}", String::from_utf8_lossy(&output.stdout));
     Ok(())
 }
 
@@ -83,9 +103,6 @@ mod tests {
 
     #[test]
     fn read_with_section_some() {
-        // Verify that read() with Some("2") builds the right man arguments
-        // (We can't test the full pipeline without man installed, but we can
-        // verify the function signature accepts Option<&str>)
         fn _type_check() {
             let _: fn(&str, Option<&str>, &str) -> anyhow::Result<()> = read;
         }
@@ -93,7 +110,6 @@ mod tests {
 
     #[test]
     fn read_with_section_none() {
-        // Verify that read() with None for section is accepted
         fn _type_check() {
             let _: fn(&str, Option<&str>, &str) -> anyhow::Result<()> = read;
         }
@@ -110,5 +126,39 @@ mod tests {
         let manpath = format!("{}:", backend_path);
         assert!(manpath.ends_with(':'));
         assert_eq!(manpath, "/some/path:");
+    }
+
+    #[test]
+    fn build_command_with_section_sets_manpath() {
+        let cmd = build_command("man", "/man:", Some("2"), "execve");
+        let manpath_val = cmd.get_envs()
+            .find(|(k, _)| k.to_str() == Some("MANPATH"))
+            .and_then(|(_, v)| v);
+        assert_eq!(manpath_val, Some(std::ffi::OsStr::new("/man:")));
+    }
+
+    #[test]
+    fn build_command_without_section_sets_manpath() {
+        let cmd = build_command("man", "/man:", None, "execve");
+        let manpath_val = cmd.get_envs()
+            .find(|(k, _)| k.to_str() == Some("MANPATH"))
+            .and_then(|(_, v)| v);
+        assert_eq!(manpath_val, Some(std::ffi::OsStr::new("/man:")));
+    }
+
+    #[test]
+    fn read_rejects_invalid_backend_name() {
+        let result = read("..", Some("2"), "open");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("invalid backend name"));
+    }
+
+    #[test]
+    fn read_rejects_nonexistent_backend() {
+        let result = read("nonexistent_backend_xyz", Some("2"), "open");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("not installed") || err_msg.contains("not found"));
     }
 }
