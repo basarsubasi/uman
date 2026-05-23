@@ -1,6 +1,6 @@
 # `uniman` — Universal Man Pages
 
-`uniman` read man pages of any operating system on any unix machine, natively.
+Read man pages of any operating system on any unix machine, natively.
 
 https://github.com/user-attachments/assets/f292953a-0d72-4a23-b896-9bb3f6da32a8
 
