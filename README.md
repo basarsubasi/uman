@@ -23,7 +23,7 @@ cargo install uniman
 ### From Source
 
 ```bash
-git clone https://github.com/your-org/uniman.git
+git clone https://github.com/basarsubasi/uniman.git
 cd uniman
 cargo build --release 
 ```
