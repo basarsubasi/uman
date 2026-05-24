@@ -455,6 +455,21 @@ pub fn find_page(backend: &str, topic: &str) -> anyhow::Result<Option<(i32, Stri
     })
 }
 
+pub fn find_page_path(backend: &str, section: i32, topic: &str) -> anyhow::Result<Option<String>> {
+    with_conn(|conn| {
+        let mut stmt = conn.prepare(
+            "SELECT path FROM pages WHERE backend = ?1 AND section = ?2 AND name = ?3",
+        )?;
+
+        let results: Vec<String> = stmt
+            .query_map(rusqlite::params![backend, section, topic], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(results.into_iter().next())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

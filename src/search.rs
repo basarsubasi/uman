@@ -1,14 +1,12 @@
 use crate::db;
 use crate::fzf;
 
-pub fn run_filename(topic: &str) -> anyhow::Result<()> {
+pub fn run_filename(topic: &str, plain_text: bool) -> anyhow::Result<()> {
     let results = db::search_by_name(topic)?;
     if results.is_empty() {
         println!("No matches for '{}' in page names.", topic);
         return Ok(());
     }
-
-    fzf::require_fzf()?;
 
     let lines: Vec<String> = results
         .iter()
@@ -19,6 +17,16 @@ pub fn run_filename(topic: &str) -> anyhow::Result<()> {
         .collect();
 
     let header = format!("{:<20}\t{}", "BACKEND", "NAME");
+
+    if plain_text {
+        println!("{}", header);
+        for line in &lines {
+            println!("{}", line);
+        }
+        return Ok(());
+    }
+
+    fzf::require_fzf()?;
 
     let exe = std::env::current_exe()
         .ok()
@@ -32,14 +40,12 @@ pub fn run_filename(topic: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_keyword(keyword: &str) -> anyhow::Result<()> {
+pub fn run_keyword(keyword: &str, plain_text: bool) -> anyhow::Result<()> {
     let results = db::search_by_keyword(keyword)?;
     if results.is_empty() {
         println!("No matches for '{}' in page names and descriptions.", keyword);
         return Ok(());
     }
-
-    fzf::require_fzf()?;
 
     let lines: Vec<String> = results
         .iter()
@@ -50,6 +56,16 @@ pub fn run_keyword(keyword: &str) -> anyhow::Result<()> {
         .collect();
 
     let header = format!("{:<20}\t{:<30}\t{}", "BACKEND", "NAME", "DESCRIPTION");
+
+    if plain_text {
+        println!("{}", header);
+        for line in &lines {
+            println!("{}", line);
+        }
+        return Ok(());
+    }
+
+    fzf::require_fzf()?;
 
     let exe = std::env::current_exe()
         .ok()
@@ -63,14 +79,12 @@ pub fn run_keyword(keyword: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn run_all() -> anyhow::Result<()> {
+pub fn run_all(plain_text: bool) -> anyhow::Result<()> {
     let results = db::list_all_topics()?;
     if results.is_empty() {
         println!("No man pages indexed. Try installing a backend first.");
         return Ok(());
     }
-
-    fzf::require_fzf()?;
 
     let lines: Vec<String> = results
         .iter()
@@ -81,6 +95,16 @@ pub fn run_all() -> anyhow::Result<()> {
         .collect();
 
     let header = format!("{:<20}\t{:<30}\t{}", "BACKEND", "NAME", "DESCRIPTION");
+
+    if plain_text {
+        println!("{}", header);
+        for line in &lines {
+            println!("{}", line);
+        }
+        return Ok(());
+    }
+
+    fzf::require_fzf()?;
 
     let exe = std::env::current_exe()
         .ok()

@@ -14,6 +14,14 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
+    #[arg(
+        short = 'p',
+        long = "plain-text",
+        global = true,
+        help = "Print results to stdout instead of using fzf/man"
+    )]
+    pub plain_text: bool,
+
     #[arg(help = "Backend name or alias (e.g. linux-upstream, linux)", value_hint = ValueHint::Other)]
     pub backend: Option<String>,
 
