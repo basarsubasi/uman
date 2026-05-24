@@ -431,16 +431,31 @@ pub fn list_topics(name: &str, plain_text: bool) -> anyhow::Result<()> {
         return Ok(());
     }
 
+    const CELL_PAD: &str = " ";
+    fn pad_cell(value: &str) -> String {
+        format!("{CELL_PAD}{value}{CELL_PAD}")
+    }
+
     let lines: Vec<String> = topics
         .iter()
         .map(|(section, topic_name, description)| {
-            let display_name = format!("{}({})", topic_name, section);
+            let section_col = section.to_string();
+            let display_name = format!("{}({})", topic_name, section_col);
+            let display_col = format!("{display_name:<40}");
             // 1=section, 2=name, 3=display_name, 4=description
-            format!("{}\t{}\t{:<40}\t{}", section, topic_name, display_name, description)
+            format!(
+                "{}\t{}\t{}\t{}",
+                pad_cell(&section_col),
+                pad_cell(topic_name),
+                pad_cell(&display_col),
+                pad_cell(description)
+            )
         })
         .collect();
 
-    let header = format!("{:<40}\t{}", "NAME", "DESCRIPTION");
+    let header_name = pad_cell(&format!("{:<40}", "NAME"));
+    let header_desc = pad_cell("DESCRIPTION");
+    let header = format!("{}\t{}", header_name, header_desc);
 
     if plain_text {
         println!("{}", header);
