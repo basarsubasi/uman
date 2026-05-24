@@ -1,6 +1,6 @@
 [package]
 name = "uniman"
-version = "0.1.0"
+version = "1.0.1"
 authors = ["basarsubasi"]
 edition = "2021"
 description = "Universal Man Pages. Read man pages of any operating system on any unix machine, natively."
