@@ -251,7 +251,7 @@ mod tests {
         assert!(config.backends.contains_key("freebsd"));
         assert!(config.backends.contains_key("netbsd"));
         assert!(config.backends.contains_key("openbsd"));
-        assert!(config.backends.contains_key("apple"));
+        assert!(config.backends.contains_key("macos"));
         assert_eq!(config.backends.len(), 5);
     }
 
@@ -269,7 +269,14 @@ mod tests {
     #[test]
     fn defaults_has_default_backend() {
         let config = Config::defaults();
-        assert_eq!(config.default_backend.as_deref(), Some("linux-upstream"));
+        let expected = match std::env::consts::OS {
+            "macos" => "macos",
+            "freebsd" => "freebsd",
+            "netbsd" => "netbsd",
+            "openbsd" => "openbsd",
+            _ => "linux-upstream",
+        };
+        assert_eq!(config.default_backend.as_deref(), Some(expected));
     }
 
     #[test]
@@ -453,7 +460,7 @@ mod tests {
     fn backends_are_sorted_in_btreemap() {
         let config = Config::defaults();
         let keys: Vec<&String> = config.backends.keys().collect();
-        assert_eq!(keys, &["apple", "freebsd", "linux-upstream", "netbsd", "openbsd"]);
+        assert_eq!(keys, &["freebsd", "linux-upstream", "macos", "netbsd", "openbsd"]);
     }
 
     #[test]

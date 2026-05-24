@@ -1,6 +1,7 @@
 use uniman::backend;
 use uniman::cli;
 use uniman::config::Config;
+use uniman::deps;
 use uniman::paths;
 use uniman::render;
 use uniman::search;
@@ -13,6 +14,8 @@ fn is_numeric(s: &str) -> bool {
 }
 
 fn main() -> anyhow::Result<()> {
+    deps::check_dependencies()?;
+
     let cli = cli::Cli::parse();
 
     if let Some(command) = cli.command {
@@ -56,7 +59,9 @@ fn main() -> anyhow::Result<()> {
     } else if let Some(first) = cli.backend {
         dispatch_read(first, cli.section, cli.topic)?;
     } else {
-        print_usage();
+        let mut cmd = cli::Cli::command();
+        cmd.print_help()?;
+        println!();
     }
 
     Ok(())
@@ -85,7 +90,9 @@ fn dispatch_read(
 
         // Just a backend name with nothing else — incomplete, show usage
         (Some(_), None, None, _, _) => {
-            print_usage();
+            let mut cmd = cli::Cli::command();
+            cmd.print_help()?;
+            println!();
             std::process::exit(1);
         }
 
@@ -105,7 +112,9 @@ fn dispatch_read(
         _ => {
             eprintln!("error: '{}' is not a known backend or alias", first);
             eprintln!();
-            print_usage();
+            let mut cmd = cli::Cli::command();
+            cmd.print_help()?;
+            println!();
             std::process::exit(1);
         }
     }
@@ -132,19 +141,4 @@ fn get_or_prompt_default_backend(config: &uniman::config::Config) -> anyhow::Res
         }
         Err(e) => Err(e.into()),
     }
-}
-
-fn print_usage() {
-    eprintln!("usage: uniman <backend> [<section>] <topic>");
-    eprintln!("       uniman <topic>                          (uses default backend)");
-    eprintln!("       uniman <section> <topic>                 (uses default backend)");
-    eprintln!("       uniman install <backend>");
-    eprintln!("       uniman remove <backend>");
-    eprintln!("       uniman update [<backend>]");
-    eprintln!("       uniman search [-k] <topic>");
-    eprintln!("       uniman list");
-    eprintln!("       uniman list <backend>");
-    eprintln!("       uniman config");
-    eprintln!("       uniman completion <shell>");
-    eprintln!("       uniman default [<name>]");
 }

@@ -2,6 +2,7 @@ pub mod backend;
 pub mod cli;
 pub mod config;
 pub mod db;
+pub mod deps;
 pub mod error;
 pub mod fzf;
 pub mod paths;

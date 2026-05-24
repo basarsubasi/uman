@@ -1,7 +1,16 @@
 [package]
 name = "uniman"
 version = "0.1.0"
+authors = ["basarsubasi"]
 edition = "2021"
+description = "Universal Man Pages. Read man pages of any operating system on any unix machine, natively."
+readme = "README.md"
+repository = "https://github.com/basarsubasi/uniman"
+license-file = "LICENSE"
+keywords = ["man", "man-pages", "cli", "documentation", "unix"]
+categories = ["command-line-utilities"]
+exclude = ["target"]
+
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -16,3 +25,4 @@ dirs = "6"
 regex = "1"
 once_cell = "1"
 tempfile = "3"
+which = "7.0.0"
