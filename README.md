@@ -19,8 +19,9 @@ https://github.com/user-attachments/assets/f292953a-0d72-4a23-b896-9bb3f6da32a8
 ```bash
 git clone https://github.com/your-org/uniman.git
 cd uniman
-cargo install --path .
+cargo build --release 
 ```
+(move the binary from target/release/uniman to somewhere in path)
 
 ## Configuration
 
