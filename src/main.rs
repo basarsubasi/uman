@@ -14,14 +14,19 @@ fn is_numeric(s: &str) -> bool {
 }
 
 fn main() -> anyhow::Result<()> {
-    deps::check_dependencies()?;
-
     let cli = cli::Cli::parse();
+    let requires_fzf = !cli.plain_text
+        && matches!(
+            cli.command,
+            Some(cli::Commands::Search { .. }) | Some(cli::Commands::List { backend: Some(_) })
+        );
+    let requires_renderer = matches!(cli.command, None) && cli.backend.is_some();
+    deps::check_dependencies(requires_fzf, requires_renderer)?;
 
     if let Some(command) = cli.command {
         match command {
             cli::Commands::List { backend } => match backend {
-                Some(b) => backend::list_topics(&b)?,
+                Some(b) => backend::list_topics(&b, cli.plain_text)?,
                 None => backend::list()?,
             },
             cli::Commands::Config => {
@@ -47,17 +52,17 @@ fn main() -> anyhow::Result<()> {
             cli::Commands::Search { keyword, topic } => {
                 if let Some(t) = topic {
                     if keyword {
-                        search::run_keyword(&t)?;
+                        search::run_keyword(&t, cli.plain_text)?;
                     } else {
-                        search::run_filename(&t)?;
+                        search::run_filename(&t, cli.plain_text)?;
                     }
                 } else {
-                    search::run_all()?;
+                    search::run_all(cli.plain_text)?;
                 }
             }
         }
     } else if let Some(first) = cli.backend {
-        dispatch_read(first, cli.section, cli.topic)?;
+        dispatch_read(first, cli.section, cli.topic, cli.plain_text)?;
     } else {
         let mut cmd = cli::Cli::command();
         cmd.print_help()?;
@@ -71,6 +76,7 @@ fn dispatch_read(
     first: String,
     second: Option<String>,
     third: Option<String>,
+    plain_text: bool,
 ) -> anyhow::Result<()> {
     let config = Config::load()?;
     let backend_def = config.resolve(&first);
@@ -80,12 +86,20 @@ fn dispatch_read(
     match (resolved, second, third, is_backend, is_numeric(&first)) {
         // uniman <backend> <section> <topic>
         (Some(def), Some(sec), Some(top), _, _) => {
-            render::read(&def.name, Some(&sec), &top)?;
+            if plain_text {
+                render::read_plain(&def.name, Some(&sec), &top)?;
+            } else {
+                render::read(&def.name, Some(&sec), &top)?;
+            }
         }
 
         // uniman <backend> <topic>  (2 args, first resolves as backend)
         (Some(def), Some(top), None, _, _) => {
-            render::read(&def.name, None, &top)?;
+            if plain_text {
+                render::read_plain(&def.name, None, &top)?;
+            } else {
+                render::read(&def.name, None, &top)?;
+            }
         }
 
         // Just a backend name with nothing else — incomplete, show usage
@@ -99,13 +113,21 @@ fn dispatch_read(
         // uniman <section> <topic>  (2 args, first is numeric, not a backend)
         (None, Some(top), None, false, true) => {
             let default_def = get_or_prompt_default_backend(&config)?;
-            render::read(&default_def.name, Some(&first), &top)?;
+            if plain_text {
+                render::read_plain(&default_def.name, Some(&first), &top)?;
+            } else {
+                render::read(&default_def.name, Some(&first), &top)?;
+            }
         }
 
         // uniman <topic>  (1 arg, not a backend, not numeric)
         (None, None, None, false, false) => {
             let default_def = get_or_prompt_default_backend(&config)?;
-            render::read(&default_def.name, None, &first)?;
+            if plain_text {
+                render::read_plain(&default_def.name, None, &first)?;
+            } else {
+                render::read(&default_def.name, None, &first)?;
+            }
         }
 
         // Unresolvable

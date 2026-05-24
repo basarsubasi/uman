@@ -12,6 +12,40 @@ fn parse_read_three_args() {
 }
 
 #[test]
+fn parse_read_three_args_with_plain_text_flag() {
+    let cli = uniman::cli::Cli::try_parse_from([
+        "uniman",
+        "-p",
+        "linux-upstream",
+        "2",
+        "execve",
+    ])
+    .unwrap();
+    assert!(cli.plain_text);
+    assert!(cli.command.is_none());
+    assert_eq!(cli.backend.as_deref(), Some("linux-upstream"));
+    assert_eq!(cli.section.as_deref(), Some("2"));
+    assert_eq!(cli.topic.as_deref(), Some("execve"));
+}
+
+#[test]
+fn parse_read_three_args_plain_text_flag_last() {
+    let cli = uniman::cli::Cli::try_parse_from([
+        "uniman",
+        "linux-upstream",
+        "2",
+        "execve",
+        "-p",
+    ])
+    .unwrap();
+    assert!(cli.plain_text);
+    assert!(cli.command.is_none());
+    assert_eq!(cli.backend.as_deref(), Some("linux-upstream"));
+    assert_eq!(cli.section.as_deref(), Some("2"));
+    assert_eq!(cli.topic.as_deref(), Some("execve"));
+}
+
+#[test]
 fn parse_install() {
     let cli = uniman::cli::Cli::try_parse_from(["uniman", "install", "linux-upstream"]).unwrap();
     match cli.command {
@@ -50,6 +84,26 @@ fn parse_list() {
 #[test]
 fn parse_list_backend() {
     let cli = uniman::cli::Cli::try_parse_from(["uniman", "list", "linux-upstream"]).unwrap();
+    match cli.command {
+        Some(Commands::List { backend }) => assert_eq!(backend.as_deref(), Some("linux-upstream")),
+        other => panic!("expected List with backend, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_list_with_plain_text_flag() {
+    let cli = uniman::cli::Cli::try_parse_from(["uniman", "-p", "list", "linux-upstream"]).unwrap();
+    assert!(cli.plain_text);
+    match cli.command {
+        Some(Commands::List { backend }) => assert_eq!(backend.as_deref(), Some("linux-upstream")),
+        other => panic!("expected List with backend, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_list_with_plain_text_flag_last() {
+    let cli = uniman::cli::Cli::try_parse_from(["uniman", "list", "linux-upstream", "-p"]).unwrap();
+    assert!(cli.plain_text);
     match cli.command {
         Some(Commands::List { backend }) => assert_eq!(backend.as_deref(), Some("linux-upstream")),
         other => panic!("expected List with backend, got {:?}", other),
@@ -98,6 +152,19 @@ fn parse_search() {
 #[test]
 fn parse_search_with_keyword_flag() {
     let cli = uniman::cli::Cli::try_parse_from(["uniman", "search", "-k", "execute"]).unwrap();
+    match cli.command {
+        Some(Commands::Search { keyword, topic }) => {
+            assert!(keyword);
+            assert_eq!(topic.as_deref(), Some("execute"));
+        }
+        other => panic!("expected Search, got {:?}", other),
+    }
+}
+
+#[test]
+fn parse_search_with_plain_text_flag() {
+    let cli = uniman::cli::Cli::try_parse_from(["uniman", "search", "-k", "execute", "-p"]).unwrap();
+    assert!(cli.plain_text);
     match cli.command {
         Some(Commands::Search { keyword, topic }) => {
             assert!(keyword);

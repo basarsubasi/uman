@@ -6,11 +6,12 @@ https://github.com/user-attachments/assets/f292953a-0d72-4a23-b896-9bb3f6da32a8
 
 ## Dependencies
 
-`uniman` delegates rendering to your system's man page renderer. Make sure you have either `man-db` or `mandoc` on your system.
 
 `git` is required for cloning backends. `curl` is needed for HTTP-backed backends.
 
-`fzf` is required for the interactive search and listing menus.
+`fzf` is required for the interactive search and listing menus. (optional)
+
+`man-db` or `mandoc` is required for the rendering of the man pages (optional)
 
 ## Installation
 

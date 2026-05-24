@@ -413,7 +413,7 @@ pub fn list() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn list_topics(name: &str) -> anyhow::Result<()> {
+pub fn list_topics(name: &str, plain_text: bool) -> anyhow::Result<()> {
     paths::validate_backend_name(name)?;
 
     let config = Config::load()?;
@@ -423,8 +423,6 @@ pub fn list_topics(name: &str) -> anyhow::Result<()> {
     if !paths::backend_dir(canonical).exists() {
         return Err(UnimanError::BackendNotInstalled(canonical.to_string()).into());
     }
-
-    crate::fzf::require_fzf()?;
 
     let topics = crate::db::list_topics_for_backend(canonical)?;
 
@@ -443,6 +441,16 @@ pub fn list_topics(name: &str) -> anyhow::Result<()> {
         .collect();
 
     let header = format!("{:<40}\t{}", "NAME", "DESCRIPTION");
+
+    if plain_text {
+        println!("{}", header);
+        for line in &lines {
+            println!("{}", line);
+        }
+        return Ok(());
+    }
+
+    crate::fzf::require_fzf()?;
 
     // Use the running binary's path so the execute command works regardless
     // of how uniman is installed (PATH, full path, cargo run, etc.).
