@@ -14,6 +14,12 @@ https://github.com/user-attachments/assets/f292953a-0d72-4a23-b896-9bb3f6da32a8
 
 ## Installation
 
+### From crates.io
+
+```bash
+cargo install uniman
+```
+
 ### From Source
 
 ```bash
