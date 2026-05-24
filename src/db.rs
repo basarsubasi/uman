@@ -94,6 +94,8 @@ fn extract_description(file_path: &Path) -> String {
 
     let mut in_name_section = false;
     let mut description_lines: Vec<String> = Vec::new();
+    let mut name_parts: Vec<String> = Vec::new();
+    let mut nd_line: Option<String> = None;
 
     for line in content.lines() {
         let trimmed = line.trim();
@@ -109,21 +111,55 @@ fn extract_description(file_path: &Path) -> String {
         }
 
         if in_name_section {
-            // Skip empty lines and roff commands
-            if trimmed.is_empty() || trimmed.starts_with('.') {
+            if trimmed.is_empty() {
                 continue;
             }
 
-            // This is a line in the NAME section
+            if trimmed.starts_with('.') {
+                let rest = trimmed
+                    .strip_prefix(".Nm")
+                    .or_else(|| trimmed.strip_prefix(".ND"))
+                    .or_else(|| trimmed.strip_prefix(".Nd"))
+                    .or_else(|| trimmed.strip_prefix(".B"))
+                    .or_else(|| trimmed.strip_prefix(".BR"))
+                    .or_else(|| trimmed.strip_prefix(".BI"))
+                    .or_else(|| trimmed.strip_prefix(".IR"))
+                    .or_else(|| trimmed.strip_prefix(".RI"))
+                    .or_else(|| trimmed.strip_prefix(".RB"))
+                    .or_else(|| trimmed.strip_prefix(".SM"))
+                    .or_else(|| trimmed.strip_prefix(".SB"));
+
+                if let Some(text) = rest {
+                    let content = text.trim();
+                    if trimmed.starts_with(".Nm") {
+                        if !content.is_empty() {
+                            name_parts.push(content.to_string());
+                        }
+                    } else if trimmed.starts_with(".Nd") || trimmed.starts_with(".ND") {
+                        if !content.is_empty() {
+                            nd_line = Some(content.to_string());
+                        }
+                    } else if !content.is_empty() {
+                        description_lines.push(content.to_string());
+                    }
+                }
+                continue;
+            }
+
+            // This is a plain line in the NAME section
             description_lines.push(trimmed.to_string());
         }
     }
 
-    if description_lines.is_empty() {
+    if description_lines.is_empty() && nd_line.is_none() {
         return String::new();
     }
 
-    let raw = description_lines.join(" ");
+    let raw = if let Some(nd) = nd_line {
+        nd
+    } else {
+        description_lines.join(" ")
+    };
 
     // Clean up roff formatting
     let cleaned = raw
@@ -141,6 +177,13 @@ fn extract_description(file_path: &Path) -> String {
     // Strip the name portion before " - " to leave just the description
     if let Some(idx) = cleaned.find(" - ") {
         cleaned[idx + 3..].trim().to_string()
+    } else if !name_parts.is_empty() {
+        let names = name_parts.join(" ");
+        cleaned
+            .trim_start_matches(&names)
+            .trim_start_matches("-")
+            .trim()
+            .to_string()
     } else {
         cleaned.trim().to_string()
     }
