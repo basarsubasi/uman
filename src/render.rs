@@ -85,7 +85,11 @@ pub fn read(backend_name: &str, section: Option<&str>, topic: &str) -> anyhow::R
             .map(|(sec, _)| sec.to_string()),
     };
 
-    let manpath = format!("{}:", backend_path.display());
+    let manpath = if backend_name == "os" {
+        format!("{}:", backend_path.display())
+    } else {
+        backend_path.display().to_string()
+    };
 
     let mut cmd = build_command(
         &renderer,
@@ -134,7 +138,11 @@ pub fn read_plain(backend_name: &str, section: Option<&str>, topic: &str) -> any
             .map(|(sec, _)| sec.to_string()),
     };
 
-    let manpath = format!("{}:", backend_path.display());
+    let manpath = if backend_name == "os" {
+        format!("{}:", backend_path.display())
+    } else {
+        backend_path.display().to_string()
+    };
 
     let mut cmd = if renderer == "mandoc" {
         let section_num = match &resolved_section {
